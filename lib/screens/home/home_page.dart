@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../tasks/tasks_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,14 +15,14 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      _PageWrap(title: 'Лента', child: _PlaceholderCard(text: 'Добро пожаловать!')),
-      _PageWrap(title: 'Задачи', child: _PlaceholderCard(text: 'Ваши задания здесь')),
-      _PageWrap(title: 'Настройки', child: _PlaceholderCard(text: 'Настройки приложения')),
+      const _PageWrap(title: 'Домой', child: _PlaceholderCard(text: 'Лента скоро будет!')),
+      const _TasksTab(),
+      const _PageWrap(title: 'Настройки', child: _PlaceholderCard(text: 'Настройки в разработке')),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Домашечка'),
+        title: const Text('Shelper'),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline),
@@ -74,6 +75,14 @@ class _PlaceholderCard extends StatelessWidget {
         child: Text(text, style: Theme.of(context).textTheme.bodyLarge),
       ),
     );
+  }
+}
+
+class _TasksTab extends StatelessWidget {
+  const _TasksTab();
+  @override
+  Widget build(BuildContext context) {
+    return const TasksPage();
   }
 }
 
