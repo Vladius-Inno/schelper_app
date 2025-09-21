@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -50,9 +50,20 @@ class AuthService {
   Future<String?> getRefreshToken() => _storage.read(key: _kRefreshToken);
 
   Future<void> logout() async {
+  final refresh = await _storage.read(key: _kRefreshToken);
+  try {
+    if (refresh != null) {
+      await _api.postJson('/auth/logout', {
+        'refresh_token': refresh,
+      });
+    }
+  } catch (_) {
+    // ignore server errors on logout to keep client idempotent
+  } finally {
     await _storage.delete(key: _kAccessToken);
     await _storage.delete(key: _kRefreshToken);
   }
+}
 
   Future<String?> refreshToken() async {
     final refresh = await getRefreshToken();
@@ -67,4 +78,5 @@ class AuthService {
     return token;
   }
 }
+
 

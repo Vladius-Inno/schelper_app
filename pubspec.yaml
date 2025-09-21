@@ -1,4 +1,4 @@
-name: schelper_app
+﻿name: schelper_app
 description: "Домашечка — клиент для FastAPI, Material Design, auth + home."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -63,20 +63,21 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/logo_small.png
 
 # Native splash configuration
 flutter_native_splash:
   color: "#3B82F6" # primary blue
   color_dark: "#111827"
-  image: assets/logo.png
-  image_dark: assets/logo.png
+  image: assets/logo_small.png
+  image_dark: assets/logo_small.png
   android: true
   ios: false
   android_12:
     color: "#3B82F6"
     color_dark: "#111827"
-    image: assets/logo.png
-    image_dark: assets/logo.png
+    image: assets/logo_small.png
+    image_dark: assets/logo_small.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -108,3 +109,4 @@ flutter_native_splash:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
