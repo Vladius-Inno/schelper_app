@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../models/tasks.dart';
 import '../../store/tasks_store.dart';
-import 'subtask_screen.dart';
+import 'day_tasks_page.dart';
 
 class TasksPage extends StatefulWidget {
   const TasksPage({super.key});
@@ -15,6 +16,7 @@ class _TasksPageState extends State<TasksPage> {
   void initState() {
     super.initState();
     tasksStore.addListener(_onChanged);
+    tasksStore.load();
   }
 
   @override
@@ -25,162 +27,177 @@ class _TasksPageState extends State<TasksPage> {
 
   void _onChanged() => setState(() {});
 
+  Future<void> _refresh() async {
+    await tasksStore.load();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
+    final theme = Theme.of(context);
+    final list = ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      itemCount: tasksStore.subjects.length,
+      itemCount: tasksStore.days.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final subject = tasksStore.subjects[index];
-        return _SubjectCard(subject: subject);
+        final day = tasksStore.days[index];
+        return _DayCard(day: day, theme: theme);
       },
     );
-  }
-}
 
-class _SubjectCard extends StatelessWidget {
-  final Subject subject;
-  const _SubjectCard({required this.subject});
-
-  @override
-  Widget build(BuildContext context) {
-    final status = subject.status;
-    final progress = '${subject.completedSubtasks} / ${subject.totalSubtasks}';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    if (tasksStore.loading && tasksStore.days.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (tasksStore.days.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: subject.color.withOpacity(0.15),
-                  child: Icon(subject.icon, color: subject.color),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(subject.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      Text('${statusLabelTask(status)} • $progress', style: Theme.of(context).textTheme.bodyMedium),
-                    ],
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.4,
+              child: Center(
+                child: Text(
+                  'No tasks yet',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.outline,
                   ),
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 12),
-            for (final task in subject.tasks) _TaskBlock(subject: subject, task: task),
           ],
         ),
-      ),
-    );
+      );
+    }
+    return RefreshIndicator(onRefresh: _refresh, child: list);
   }
 }
 
-class _TaskBlock extends StatelessWidget {
-  final Subject subject;
-  final TaskItem task;
-  const _TaskBlock({required this.subject, required this.task});
-
-  @override
-  Widget build(BuildContext context) {
-    final dateLabel = _formatDate(task.date);
-    return Padding(
-      padding: const EdgeInsets.only(top: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(dateLabel, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          ...task.subtasks.map((st) => _SubtaskTile(subjectId: subject.id, taskId: task.id, subtask: st)),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime d) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final that = DateTime(d.year, d.month, d.day);
-    if (that == today) return 'Сегодня';
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (that == yesterday) return 'Вчера';
-    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}';
-  }
-}
-
-class _SubtaskTile extends StatelessWidget {
-  final String subjectId;
-  final String taskId;
-  final Subtask subtask;
-  const _SubtaskTile({required this.subjectId, required this.taskId, required this.subtask});
-
-  Color _statusColor(BuildContext context, SubtaskStatus s) {
-    switch (s) {
-      case SubtaskStatus.todo:
-        return Theme.of(context).colorScheme.surfaceVariant;
-      case SubtaskStatus.inProgress:
-        return Theme.of(context).colorScheme.primary.withOpacity(0.15);
-      case SubtaskStatus.done:
-        return Colors.green.withOpacity(0.15);
-      case SubtaskStatus.checked:
-        return Colors.purple.withOpacity(0.15);
-    }
-  }
-
-  IconData _statusIcon(SubtaskStatus s) {
-    switch (s) {
-      case SubtaskStatus.todo:
-        return Icons.radio_button_unchecked;
-      case SubtaskStatus.inProgress:
-        return Icons.timelapse;
-      case SubtaskStatus.done:
-        return Icons.check_circle_outline;
-      case SubtaskStatus.checked:
-        return Icons.verified_outlined;
-    }
-  }
+class _DayCard extends StatelessWidget {
+  final DayTasks day;
+  final ThemeData theme;
+  const _DayCard({required this.day, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      borderRadius: BorderRadius.circular(16),
       onTap: () {
         Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => SubtaskScreen(
-              subjectId: subjectId,
-              taskId: taskId,
-              subtaskId: subtask.id,
-            ),
-          ),
+          MaterialPageRoute(builder: (_) => DayTasksPage(isoDate: day.isoDate)),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: _statusColor(context, subtask.status),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(_statusIcon(subtask.status), size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                subtask.title,
-                style: Theme.of(context).textTheme.bodyLarge,
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 1,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _formatDayLabel(day.date),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+                ],
               ),
-            ),
-            if (subtask.parentReaction != null)
-              Text(subtask.parentReaction!, style: const TextStyle(fontSize: 16)),
-          ],
+              const SizedBox(height: 12),
+              Column(
+                children: [
+                  for (final task in day.tasks)
+                    _SubjectPreview(task: task, theme: theme),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  String _formatDayLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    if (target == today) return 'Сегодня';
+    if (target == today.add(const Duration(days: 1))) return 'Завтра';
+    if (target == today.subtract(const Duration(days: 1))) return 'Вчера';
+    const months = [
+      'янв',
+      'фев',
+      'мар',
+      'апр',
+      'май',
+      'июн',
+      'июл',
+      'авг',
+      'сен',
+      'окт',
+      'ноя',
+      'дек',
+    ];
+    final month = months[target.month - 1];
+    return '${target.day} $month ${target.year}';
+  }
 }
 
+class _SubjectPreview extends StatelessWidget {
+  final TaskItem task;
+  final ThemeData theme;
+  const _SubjectPreview({required this.task, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = theme.textTheme.bodyMedium?.color?.withOpacity(0.7);
+    final text = task.firstLine.isEmpty ? 'Без названия' : task.firstLine;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: task.subjectColor.withOpacity(0.15),
+            foregroundColor: task.subjectColor,
+            child: Icon(task.subjectIcon, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    task.subjectName,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: secondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

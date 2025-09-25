@@ -4,10 +4,13 @@ import '../../models/tasks.dart';
 import '../../store/tasks_store.dart';
 
 class SubtaskScreen extends StatefulWidget {
-  final String subjectId;
-  final String taskId;
-  final String subtaskId;
-  const SubtaskScreen({super.key, required this.subjectId, required this.taskId, required this.subtaskId});
+  final int taskId;
+  final int subtaskId;
+  const SubtaskScreen({
+    super.key,
+    required this.taskId,
+    required this.subtaskId,
+  });
 
   @override
   State<SubtaskScreen> createState() => _SubtaskScreenState();
@@ -19,7 +22,8 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
   Timer? _timer;
   bool _running = false;
 
-  Subtask? get _subtask => tasksStore.findSubtask(widget.subjectId, widget.taskId, widget.subtaskId);
+  Subtask? get _subtask =>
+      tasksStore.findSubtask(widget.taskId, widget.subtaskId);
 
   @override
   void initState() {
@@ -33,9 +37,9 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
     super.dispose();
   }
 
-  void _start() {
+  Future<void> _start() async {
     if (_subtask != null) {
-      tasksStore.startSubtask(widget.subjectId, widget.taskId, widget.subtaskId);
+      await tasksStore.startSubtask(widget.taskId, widget.subtaskId);
     }
     _timer?.cancel();
     setState(() {
@@ -63,17 +67,20 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
     });
   }
 
-  void _stop() {
+  Future<void> _stop() async {
     _timer?.cancel();
     setState(() {
       _running = false;
       _duration = const Duration(minutes: defaultMinutes);
     });
-    tasksStore.stopSubtask(widget.subjectId, widget.taskId, widget.subtaskId);
+    await tasksStore.stopSubtask(widget.taskId, widget.subtaskId);
   }
 
   Future<void> _markDone() async {
-    final allDone = tasksStore.completeSubtask(widget.subjectId, widget.taskId, widget.subtaskId);
+    final allDone = await tasksStore.completeSubtask(
+      widget.taskId,
+      widget.subtaskId,
+    );
     _pause();
     await _showRewardPopup(context);
     if (allDone) {
@@ -82,7 +89,10 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _showRewardPopup(BuildContext context, {bool bonus = false}) async {
+  Future<void> _showRewardPopup(
+    BuildContext context, {
+    bool bonus = false,
+  }) async {
     await showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -100,8 +110,13 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(bonus ? 'Бонусная награда!' : 'Награда!',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(
+                  bonus ? 'Бонусная награда!' : 'Награда!',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   bonus
@@ -113,7 +128,10 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
                 const SizedBox(height: 12),
                 Text(bonus ? '🌟' : '🎉', style: const TextStyle(fontSize: 40)),
                 const SizedBox(height: 12),
-                ElevatedButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Ок')),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Ок'),
+                ),
               ],
             ),
           ),
@@ -121,7 +139,9 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
       },
       transitionBuilder: (context, anim, _, child) {
         return Transform.scale(
-            scale: 0.9 + 0.1 * anim.value, child: Opacity(opacity: anim.value, child: child));
+          scale: 0.9 + 0.1 * anim.value,
+          child: Opacity(opacity: anim.value, child: child),
+        );
       },
     );
   }
@@ -135,8 +155,14 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
         body: const Center(child: Text('Подзадача не найдена')),
       );
     }
-    final minutes = _duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = _duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final minutes = _duration.inMinutes
+        .remainder(60)
+        .toString()
+        .padLeft(2, '0');
+    final seconds = _duration.inSeconds
+        .remainder(60)
+        .toString()
+        .padLeft(2, '0');
     return Scaffold(
       appBar: AppBar(title: Text(st.title)),
       body: Padding(
@@ -148,7 +174,7 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Статус: ${statusLabelSubtask(st.status)}'),
-                Text('Очки: ${tasksStore.rewards}')
+                Text('Очки: ${tasksStore.rewards}'),
               ],
             ),
             const SizedBox(height: 16),
@@ -158,8 +184,13 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('$minutes:$seconds',
-                        style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w800)),
+                    Text(
+                      '$minutes:$seconds',
+                      style: const TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -168,7 +199,7 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
                           icon: const Icon(Icons.play_arrow),
                           iconSize: 36,
                           tooltip: 'Старт',
-                          onPressed: _running ? null : _start,
+                          onPressed: _running ? null : () => _start(),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
@@ -182,10 +213,10 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
                           icon: const Icon(Icons.stop),
                           iconSize: 36,
                           tooltip: 'Стоп',
-                          onPressed: _stop,
+                          onPressed: () => _stop(),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -203,12 +234,17 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
-                          Text('Подсказка',
-                              style:
-                                  TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          Text(
+                            'Подсказка',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           SizedBox(height: 12),
                           Text(
-                              'Разбей задание на шаги, начни с простого. Если сложно — посмотри пример или спроси у взрослого.'),
+                            'Разбей задание на шаги, начни с простого. Если сложно — посмотри пример или спроси у взрослого.',
+                          ),
                           SizedBox(height: 12),
                         ],
                       ),
@@ -222,7 +258,7 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
             ElevatedButton.icon(
               icon: const Icon(Icons.check),
               label: const Text('Выполнено'),
-              onPressed: _markDone,
+              onPressed: () => _markDone(),
             ),
           ],
         ),
@@ -230,4 +266,3 @@ class _SubtaskScreenState extends State<SubtaskScreen> {
     );
   }
 }
-
