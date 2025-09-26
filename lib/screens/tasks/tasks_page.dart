@@ -178,8 +178,15 @@ class _DayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final highlightTomorrow = _isTomorrow(day.date);
+    final outlineColor = theme.colorScheme.primary.withOpacity(0.35);
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: highlightTomorrow
+            ? BorderSide(color: outlineColor, width: 1.5)
+            : BorderSide.none,
+      ),
       elevation: 1,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -276,6 +283,17 @@ class _DayCard extends StatelessWidget {
     final month = months[target.month - 1];
     return '$dayName ${target.day} $month';
   }
+
+  bool _isTomorrow(DateTime date) {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    return _isSameDay(date, tomorrow);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
 }
 
 class _SubjectPreview extends StatelessWidget {
