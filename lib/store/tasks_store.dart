@@ -14,6 +14,12 @@ class TasksStore extends ChangeNotifier {
   List<DayTasks> days = [];
   int rewards = 0;
   bool loading = false;
+  DateTime? _currentWeekStart;
+
+  DateTime get currentWeekStart =>
+      _currentWeekStart ?? _normalizeWeekStart(DateTime.now());
+
+  DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
 
   TasksStore({TasksService? api, SubjectsService? subjectsApi})
     : _api = api ?? TasksService(),
@@ -51,25 +57,58 @@ class TasksStore extends ChangeNotifier {
         subtask.status == SubtaskStatus.checked;
   }
 
-  Future<void> load({int? subjectId}) async {
+  DateTime _normalizeWeekStart(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final delta = (normalized.weekday + 6) % 7;
+    return normalized.subtract(Duration(days: delta));
+  }
+
+  String _toIsoDate(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<void> load({int? subjectId, DateTime? weekStart}) async {
     loading = true;
     notifyListeners();
     try {
-      final taskDtos = await _api.fetchTasks(subjectId: subjectId);
+      final targetWeekStart = _normalizeWeekStart(
+        weekStart ?? _currentWeekStart ?? DateTime.now(),
+      );
+      _currentWeekStart = targetWeekStart;
+      final startIso = _toIsoDate(targetWeekStart);
+      final endIso = _toIsoDate(targetWeekStart.add(const Duration(days: 6)));
+      final taskDtos = await _api.fetchTasks(
+        subjectId: subjectId,
+        startDate: startIso,
+        endDate: endIso,
+      );
       int? subjectChildId;
-      if (taskDtos.isNotEmpty) {
-        final childIds = <int>{};
-        for (final dto in taskDtos) {
-          childIds.add(dto.childId);
-        }
-        if (childIds.length == 1) {
-          subjectChildId = childIds.first;
-        }
+      final childIds = <int>{};
+      final subjectIds = <int>{};
+      for (final dto in taskDtos) {
+        childIds.add(dto.childId);
+        subjectIds.add(dto.subjectId);
       }
-      final subjectsList = await _subjectsApi.fetchSubjects(childId: subjectChildId);
+      if (childIds.length == 1) {
+        subjectChildId = childIds.first;
+      }
+
+      final subjectsList = await _subjectsApi.fetchSubjects(
+        childId: subjectChildId,
+      );
       final Map<int, String> subjectNames = {
         for (final s in subjectsList) s.id: s.name.trim(),
       };
+      if (subjectNames.length < subjectIds.length) {
+        final fallbackSubjects = await _subjectsApi.fetchSubjects();
+        for (final s in fallbackSubjects) {
+          subjectNames.putIfAbsent(s.id, () => s.name.trim());
+        }
+      }
+
       final palette = [
         const Color(0xFF3B82F6),
         const Color(0xFF10B981),
@@ -123,6 +162,18 @@ class TasksStore extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> loadPreviousWeek() async {
+    await load(weekStart: currentWeekStart.subtract(const Duration(days: 7)));
+  }
+
+  Future<void> loadNextWeek() async {
+    await load(weekStart: currentWeekStart.add(const Duration(days: 7)));
+  }
+
+  Future<void> reloadCurrentWeek() async {
+    await load(weekStart: currentWeekStart);
   }
 
   Future<void> startSubtask(int taskId, int subtaskId) async {
@@ -205,7 +256,9 @@ class TasksStore extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final SubtaskStatus target = completed ? SubtaskStatus.done : SubtaskStatus.todo;
+    final SubtaskStatus target = completed
+        ? SubtaskStatus.done
+        : SubtaskStatus.todo;
     final wasCompleted = task.subtasks.every(_isSubtaskCompleted);
     for (final subtask in task.subtasks) {
       final wasDone = _isSubtaskCompleted(subtask);

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../models/tasks.dart';
 import '../../store/tasks_store.dart';
@@ -42,7 +42,7 @@ class _DayTasksPageState extends State<DayTasksPage> {
     return Scaffold(
       appBar: AppBar(title: Text(_formatDayTitle(day.date))),
       body: RefreshIndicator(
-        onRefresh: () async => tasksStore.load(),
+        onRefresh: () async => tasksStore.reloadCurrentWeek(),
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: day.tasks.length,

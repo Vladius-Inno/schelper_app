@@ -8,9 +8,23 @@ class TasksService {
   TasksService({AuthorizedApiClient? client})
     : _client = client ?? AuthorizedApiClient();
 
-  Future<List<_TaskDto>> fetchTasks({int? subjectId}) async {
-    final params = subjectId != null ? '?subject_id=$subjectId' : '';
-    final data = await _client.getAny('/tasks$params');
+  Future<List<_TaskDto>> fetchTasks({
+    int? subjectId,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final query = <String>[];
+    if (subjectId != null) {
+      query.add('subject_id=$subjectId');
+    }
+    if (startDate != null) {
+      query.add('start_date=$startDate');
+    }
+    if (endDate != null) {
+      query.add('end_date=$endDate');
+    }
+    final suffix = query.isEmpty ? '' : '?${query.join('&')}';
+    final data = await _client.getAny('/tasks$suffix');
     if (data is List) {
       return data
           .map((e) => _TaskDto.fromJson(Map<String, dynamic>.from(e)))
@@ -54,12 +68,12 @@ class TasksService {
     final data = await _client.patchAny('/tasks/subtasks/$subtaskId', body);
     return _SubtaskDto.fromJson(Map<String, dynamic>.from(data));
   }
+
   Future<String> updateTaskStatus(int taskId, {required String status}) async {
     final data = await _client.patchAny('/tasks/$taskId', {'status': status});
     final map = Map<String, dynamic>.from(data as Map);
     return map['status'] as String;
   }
-
 }
 
 class _SubtaskDto {
