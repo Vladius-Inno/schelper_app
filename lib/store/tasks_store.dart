@@ -21,6 +21,14 @@ class TasksStore extends ChangeNotifier {
 
   DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
 
+  bool get isOnCurrentWeek {
+    final normalizedNow = _normalizeWeekStart(DateTime.now());
+    final current = currentWeekStart;
+    return current.year == normalizedNow.year &&
+        current.month == normalizedNow.month &&
+        current.day == normalizedNow.day;
+  }
+
   TasksStore({TasksService? api, SubjectsService? subjectsApi})
     : _api = api ?? TasksService(),
       _subjectsApi = subjectsApi ?? SubjectsService();
@@ -178,6 +186,10 @@ class TasksStore extends ChangeNotifier {
 
   Future<void> loadNextWeek() async {
     await load(weekStart: currentWeekStart.add(const Duration(days: 7)));
+  }
+
+  Future<void> loadCurrentWeek() async {
+    await load(weekStart: DateTime.now());
   }
 
   Future<void> reloadCurrentWeek() async {

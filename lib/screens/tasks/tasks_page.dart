@@ -60,6 +60,9 @@ class _TasksPageState extends State<TasksPage> {
     final nextHandler = tasksStore.loading
         ? null
         : () => tasksStore.loadNextWeek();
+    final resetHandler = tasksStore.loading || tasksStore.isOnCurrentWeek
+        ? null
+        : () => tasksStore.loadCurrentWeek();
 
     final children = <Widget>[
       _WeekSwitcher(
@@ -67,6 +70,7 @@ class _TasksPageState extends State<TasksPage> {
         isLoading: tasksStore.loading,
         onPrevious: prevHandler,
         onNext: nextHandler,
+        onReset: resetHandler,
       ),
       const SizedBox(height: 12),
     ];
@@ -103,10 +107,7 @@ class _TasksPageState extends State<TasksPage> {
       }
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: children,
-    );
+    return ListView(padding: const EdgeInsets.all(16), children: children);
   }
 }
 
@@ -115,12 +116,14 @@ class _WeekSwitcher extends StatelessWidget {
   final bool isLoading;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final VoidCallback? onReset;
 
   const _WeekSwitcher({
     required this.label,
     required this.isLoading,
     this.onPrevious,
     this.onNext,
+    this.onReset,
   });
 
   @override
@@ -128,42 +131,60 @@ class _WeekSwitcher extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left),
-          onPressed: onPrevious,
-          tooltip: 'Предыдущая неделя',
-          splashRadius: 20,
-        ),
+        const SizedBox(width: 8),
         Expanded(
-          child: Column(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                'Неделя',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-                textAlign: TextAlign.center,
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: onPrevious,
+                tooltip: 'Предыдущая неделя',
+                splashRadius: 20,
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Неделя',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (isLoading) ...[
+                      const SizedBox(height: 4),
+                      const LinearProgressIndicator(minHeight: 2),
+                    ],
+                  ],
                 ),
               ),
-              if (isLoading) ...[
-                const SizedBox(height: 4),
-                const LinearProgressIndicator(minHeight: 2),
-              ],
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: onNext,
+                tooltip: 'Следуюшая неделя',
+                splashRadius: 20,
+              ),
             ],
           ),
         ),
+        const SizedBox(width: 8),
         IconButton(
-          icon: const Icon(Icons.chevron_right),
-          onPressed: onNext,
-          tooltip: 'Следующая неделя',
+          icon: const Icon(Icons.today_outlined),
+          onPressed: onReset,
+          tooltip: 'На текущую неделю',
           splashRadius: 20,
         ),
       ],
@@ -286,14 +307,17 @@ class _DayCard extends StatelessWidget {
 
   bool _isTomorrow(DateTime date) {
     final now = DateTime.now();
-    final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    final tomorrow = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 1));
     return _isSameDay(date, tomorrow);
   }
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
-
 }
 
 class _SubjectPreview extends StatelessWidget {
