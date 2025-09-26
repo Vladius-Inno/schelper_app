@@ -248,12 +248,15 @@ class _DayCard extends StatelessWidget {
   }
 
   String _formatDayLabel(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final target = DateTime(date.year, date.month, date.day);
-    if (target == today) return 'Сегодня';
-    if (target == today.add(const Duration(days: 1))) return 'Завтра';
-    if (target == today.subtract(const Duration(days: 1))) return 'Вчера';
+    const weekDays = [
+      'Понедельник',
+      'Вторник',
+      'Среда',
+      'Четверг',
+      'Пятница',
+      'Суббота',
+      'Воскресенье',
+    ];
     const months = [
       'января',
       'февраля',
@@ -268,8 +271,10 @@ class _DayCard extends StatelessWidget {
       'ноября',
       'декабря',
     ];
+    final target = DateTime(date.year, date.month, date.day);
+    final dayName = weekDays[target.weekday - 1];
     final month = months[target.month - 1];
-    return '${target.day} $month ${target.year}';
+    return '$dayName ${target.day} $month';
   }
 }
 
