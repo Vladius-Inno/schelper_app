@@ -71,7 +71,7 @@ class _TasksPageState extends State<TasksPage> {
       const SizedBox(height: 12),
     ];
 
-    if (tasksStore.loading && tasksStore.days.isEmpty) {
+    if (tasksStore.loading) {
       children.add(
         const SizedBox(
           height: 200,
