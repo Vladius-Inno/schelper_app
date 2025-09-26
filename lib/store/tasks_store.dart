@@ -7,8 +7,6 @@ import '../services/subjects_service.dart';
 import '../services/tasks_service.dart';
 
 class TasksStore extends ChangeNotifier {
-  static const int _maxWeekSearchIterations = 52;
-
   final TasksService _api;
   final SubjectsService _subjectsApi;
   final Map<int, TaskItem> _taskIndex = {};
@@ -81,29 +79,70 @@ class TasksStore extends ChangeNotifier {
     return '$y-$m-$d';
   }
 
-  Future<DateTime?> _findWeekWithTasks({
-    required DateTime initialWeekStart,
+  DateTime _parseIsoDate(String iso) {
+    final parts = iso.split('-');
+    return DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+  }
+
+  Future<bool> _hasTasksForWeek({
+    required DateTime weekStart,
+    int? subjectId,
+  }) async {
+    final startIso = _toIsoDate(weekStart);
+    final endIso = _toIsoDate(weekStart.add(const Duration(days: 6)));
+    final tasks = await _api.fetchTasks(
+      subjectId: subjectId,
+      startDate: startIso,
+      endDate: endIso,
+    );
+    return tasks.isNotEmpty;
+  }
+
+  Future<DateTime?> _findTaskDateBeyondWeek({
+    required DateTime weekStart,
     required int direction,
     int? subjectId,
-    int maxIterations = _maxWeekSearchIterations,
   }) async {
     assert(direction == -1 || direction == 1);
-    var candidate = _normalizeWeekStart(initialWeekStart);
-    final step = Duration(days: 7 * direction);
-    for (var i = 0; i < maxIterations; i++) {
-      final startIso = _toIsoDate(candidate);
-      final endIso = _toIsoDate(candidate.add(const Duration(days: 6)));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    if (direction > 0) {
+      final from = weekEnd.add(const Duration(days: 1));
       final tasks = await _api.fetchTasks(
         subjectId: subjectId,
-        startDate: startIso,
-        endDate: endIso,
+        startDate: _toIsoDate(from),
       );
-      if (tasks.isNotEmpty) {
-        return candidate;
+      DateTime? earliest;
+      for (final dto in tasks) {
+        final date = _parseIsoDate((dto as dynamic).date as String);
+        if (!date.isAfter(weekEnd)) {
+          continue;
+        }
+        if (earliest == null || date.isBefore(earliest)) {
+          earliest = date;
+        }
       }
-      candidate = candidate.add(step);
+      return earliest == null ? null : _normalizeWeekStart(earliest);
     }
-    return null;
+    final to = weekStart.subtract(const Duration(days: 1));
+    final tasks = await _api.fetchTasks(
+      subjectId: subjectId,
+      endDate: _toIsoDate(to),
+    );
+    DateTime? latest;
+    for (final dto in tasks) {
+      final date = _parseIsoDate((dto as dynamic).date as String);
+      if (!date.isBefore(weekStart)) {
+        continue;
+      }
+      if (latest == null || date.isAfter(latest)) {
+        latest = date;
+      }
+    }
+    return latest == null ? null : _normalizeWeekStart(latest);
   }
 
   Future<void> load({int? subjectId, DateTime? weekStart}) async {
@@ -211,15 +250,27 @@ class TasksStore extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      final target = await _findWeekWithTasks(
-        initialWeekStart: fallback,
+      if (await _hasTasksForWeek(
+        weekStart: fallback,
+        subjectId: subjectId,
+      )) {
+        await load(
+          subjectId: subjectId,
+          weekStart: fallback,
+        );
+        return;
+      }
+      final alternativeWeek = await _findTaskDateBeyondWeek(
+        weekStart: fallback,
         direction: direction,
         subjectId: subjectId,
       );
-      final weekToLoad = target ?? fallback;
+      if (alternativeWeek == null) {
+        return;
+      }
       await load(
         subjectId: subjectId,
-        weekStart: weekToLoad,
+        weekStart: alternativeWeek,
       );
     } finally {
       if (loading) {
