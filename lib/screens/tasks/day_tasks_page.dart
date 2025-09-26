@@ -41,17 +41,14 @@ class _DayTasksPageState extends State<DayTasksPage> {
     }
     return Scaffold(
       appBar: AppBar(title: Text(_formatDayTitle(day.date))),
-      body: RefreshIndicator(
-        onRefresh: () async => tasksStore.reloadCurrentWeek(),
-        child: ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: day.tasks.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final task = day.tasks[index];
-            return _SubjectTaskCard(task: task);
-          },
-        ),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: day.tasks.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final task = day.tasks[index];
+          return _SubjectTaskCard(task: task);
+        },
       ),
     );
   }
@@ -136,12 +133,13 @@ class _SubjectTaskCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          progress,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.outline,
+                        if (task.subtasks.isNotEmpty)
+                          Text(
+                            progress,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),

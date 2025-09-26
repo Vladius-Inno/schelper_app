@@ -93,22 +93,19 @@ class _TasksPageState extends State<TasksPage> {
         ),
       );
     } else {
-      for (var i = 0; i < tasksStore.days.length; i++) {
-        final day = tasksStore.days[i];
+      final days = tasksStore.days.reversed.toList();
+      for (var i = 0; i < days.length; i++) {
+        final day = days[i];
         children.add(_DayCard(day: day, theme: theme));
-        if (i != tasksStore.days.length - 1) {
+        if (i != days.length - 1) {
           children.add(const SizedBox(height: 12));
         }
       }
     }
 
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: children,
-      ),
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: children,
     );
   }
 }
@@ -192,10 +189,23 @@ class _DayCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    _formatDayLabel(day.date),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DayTasksPage(isoDate: day.isoDate),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        _formatDayLabel(day.date),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ),

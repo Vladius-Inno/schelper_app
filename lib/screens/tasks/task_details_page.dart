@@ -105,12 +105,13 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                               ],
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              progress,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.outline,
+                            if (hasSubtasks)
+                              Text(
+                                progress,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),

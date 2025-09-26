@@ -165,7 +165,15 @@ class TasksStore extends ChangeNotifier {
   }
 
   Future<void> loadPreviousWeek() async {
-    await load(weekStart: currentWeekStart.subtract(const Duration(days: 7)));
+    var start = currentWeekStart.subtract(const Duration(days: 7));
+    // Skip empty weeks when navigating to the past
+    for (var i = 0; i < 52; i++) {
+      await load(weekStart: start);
+      if (days.isNotEmpty) {
+        break;
+      }
+      start = start.subtract(const Duration(days: 7));
+    }
   }
 
   Future<void> loadNextWeek() async {
