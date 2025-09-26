@@ -7,9 +7,12 @@ import '../services/subjects_service.dart';
 import '../services/tasks_service.dart';
 
 class TasksStore extends ChangeNotifier {
+  static const int _maxWeekSearchIterations = 52;
+
   final TasksService _api;
   final SubjectsService _subjectsApi;
   final Map<int, TaskItem> _taskIndex = {};
+  int? _currentSubjectId;
 
   List<DayTasks> days = [];
   int rewards = 0;
@@ -78,7 +81,33 @@ class TasksStore extends ChangeNotifier {
     return '$y-$m-$d';
   }
 
+  Future<DateTime?> _findWeekWithTasks({
+    required DateTime initialWeekStart,
+    required int direction,
+    int? subjectId,
+    int maxIterations = _maxWeekSearchIterations,
+  }) async {
+    assert(direction == -1 || direction == 1);
+    var candidate = _normalizeWeekStart(initialWeekStart);
+    final step = Duration(days: 7 * direction);
+    for (var i = 0; i < maxIterations; i++) {
+      final startIso = _toIsoDate(candidate);
+      final endIso = _toIsoDate(candidate.add(const Duration(days: 6)));
+      final tasks = await _api.fetchTasks(
+        subjectId: subjectId,
+        startDate: startIso,
+        endDate: endIso,
+      );
+      if (tasks.isNotEmpty) {
+        return candidate;
+      }
+      candidate = candidate.add(step);
+    }
+    return null;
+  }
+
   Future<void> load({int? subjectId, DateTime? weekStart}) async {
+    _currentSubjectId = subjectId;
     loading = true;
     notifyListeners();
     try {
@@ -172,20 +201,40 @@ class TasksStore extends ChangeNotifier {
     }
   }
 
-  Future<void> loadPreviousWeek() async {
-    var start = currentWeekStart.subtract(const Duration(days: 7));
-    // Skip empty weeks when navigating to the past
-    for (var i = 0; i < 52; i++) {
-      await load(weekStart: start);
-      if (days.isNotEmpty) {
-        break;
+  Future<void> _navigateToWeekWithTasks(int direction) async {
+    if (direction == 0 || loading) {
+      return;
+    }
+    final subjectId = _currentSubjectId;
+    final currentStart = currentWeekStart;
+    final fallback = currentStart.add(Duration(days: 7 * direction));
+    loading = true;
+    notifyListeners();
+    try {
+      final target = await _findWeekWithTasks(
+        initialWeekStart: fallback,
+        direction: direction,
+        subjectId: subjectId,
+      );
+      final weekToLoad = target ?? fallback;
+      await load(
+        subjectId: subjectId,
+        weekStart: weekToLoad,
+      );
+    } finally {
+      if (loading) {
+        loading = false;
+        notifyListeners();
       }
-      start = start.subtract(const Duration(days: 7));
     }
   }
 
+  Future<void> loadPreviousWeek() async {
+    await _navigateToWeekWithTasks(-1);
+  }
+
   Future<void> loadNextWeek() async {
-    await load(weekStart: currentWeekStart.add(const Duration(days: 7)));
+    await _navigateToWeekWithTasks(1);
   }
 
   Future<void> loadCurrentWeek() async {
