@@ -41,14 +41,34 @@ class TasksStore extends ChangeNotifier {
     return null;
   }
 
+  bool _isTaskCompleted(TaskItem task) {
+    final status = task.aggregatedStatus;
+    return status == TaskStatus.done || status == TaskStatus.checked;
+  }
+
+  bool _isSubtaskCompleted(Subtask subtask) {
+    return subtask.status == SubtaskStatus.done ||
+        subtask.status == SubtaskStatus.checked;
+  }
+
   Future<void> load({int? subjectId}) async {
     loading = true;
     notifyListeners();
     try {
-      final dtos = await _api.fetchTasks(subjectId: subjectId);
-      final subjectsList = await _subjectsApi.fetchSubjects();
+      final taskDtos = await _api.fetchTasks(subjectId: subjectId);
+      int? subjectChildId;
+      if (taskDtos.isNotEmpty) {
+        final childIds = <int>{};
+        for (final dto in taskDtos) {
+          childIds.add(dto.childId);
+        }
+        if (childIds.length == 1) {
+          subjectChildId = childIds.first;
+        }
+      }
+      final subjectsList = await _subjectsApi.fetchSubjects(childId: subjectChildId);
       final Map<int, String> subjectNames = {
-        for (final s in subjectsList) s.id: s.name,
+        for (final s in subjectsList) s.id: s.name.trim(),
       };
       final palette = [
         const Color(0xFF3B82F6),
@@ -69,16 +89,16 @@ class TasksStore extends ChangeNotifier {
 
       final Map<String, List<TaskItem>> grouped = {};
       _taskIndex.clear();
-      for (final dto in dtos) {
+      for (final dto in taskDtos) {
         final subjId = dto.subjectId;
-        final name = subjectNames[subjId]?.trim();
-        final safeName = (name == null || name.isEmpty)
+        final name = subjectNames[subjId];
+        final displayName = (name == null || name.isEmpty)
             ? 'Subject #$subjId'
             : name;
         final color = palette[(max(subjId, 1) - 1) % palette.length];
         final icon = icons[(max(subjId, 1) - 1) % icons.length];
         final task = dto.toModel(
-          subjectName: safeName,
+          subjectName: displayName,
           subjectColor: color,
           subjectIcon: icon,
         );
@@ -128,19 +148,14 @@ class TasksStore extends ChangeNotifier {
     if (task == null || subtask == null) return false;
     final updated = await _api.completeSubtask(subtaskId);
     final updatedModel = updated.toModel();
-    final wasDone =
-        subtask.status == SubtaskStatus.done ||
-        subtask.status == SubtaskStatus.checked;
+    final wasDone = _isSubtaskCompleted(subtask);
     subtask.status = updatedModel.status;
     subtask.parentReaction = updatedModel.parentReaction;
-    if (!wasDone && subtask.status == SubtaskStatus.done) {
+    if (!wasDone && _isSubtaskCompleted(subtask)) {
       rewards += 1;
     }
     task.syncStatusFromSubtasks();
-    final allDone = task.subtasks.every(
-      (s) =>
-          s.status == SubtaskStatus.done || s.status == SubtaskStatus.checked,
-    );
+    final allDone = task.subtasks.every(_isSubtaskCompleted);
     if (allDone) {
       rewards += 2;
     }
@@ -148,25 +163,76 @@ class TasksStore extends ChangeNotifier {
     return allDone;
   }
 
-  Future<void> toggleTaskStatus(int taskId) async {
+  Future<void> setSubtaskStatus(
+    int taskId,
+    int subtaskId,
+    SubtaskStatus status,
+  ) async {
     final task = findTask(taskId);
-    if (task == null || task.subtasks.isEmpty) {
+    final subtask = findSubtask(taskId, subtaskId);
+    if (task == null || subtask == null) return;
+    final wasTaskDone = _isTaskCompleted(task);
+    final wasDone = _isSubtaskCompleted(subtask);
+    final updated = await _api.updateSubtask(
+      subtaskId,
+      status: statusLabelSubtask(status),
+    );
+    final model = updated.toModel();
+    subtask.status = model.status;
+    subtask.parentReaction = model.parentReaction;
+    task.syncStatusFromSubtasks();
+    final isDoneNow = _isSubtaskCompleted(subtask);
+    if (!wasDone && isDoneNow) {
+      rewards += 1;
+      if (task.subtasks.every(_isSubtaskCompleted) && !wasTaskDone) {
+        rewards += 2;
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> setTaskCompletion(int taskId, bool completed) async {
+    final task = findTask(taskId);
+    if (task == null) return;
+    if (task.subtasks.isEmpty) {
+      final status = completed ? TaskStatus.done : TaskStatus.todo;
+      final updatedStatus = await _api.updateTaskStatus(
+        taskId,
+        status: statusLabelTask(status),
+      );
+      task.status = taskStatusFromStr(updatedStatus);
+      task.syncStatusFromSubtasks();
+      notifyListeners();
       return;
     }
-    final target = nextTaskStatus(task.aggregatedStatus);
-    final SubtaskStatus targetSubtask = subtaskStatusFromTask(target);
+    final SubtaskStatus target = completed ? SubtaskStatus.done : SubtaskStatus.todo;
+    final wasCompleted = task.subtasks.every(_isSubtaskCompleted);
     for (final subtask in task.subtasks) {
+      final wasDone = _isSubtaskCompleted(subtask);
       final updated = await _api.updateSubtask(
         subtask.id,
-        status: statusLabelSubtask(targetSubtask),
+        status: statusLabelSubtask(target),
       );
       final model = updated.toModel();
       subtask.status = model.status;
       subtask.parentReaction = model.parentReaction;
+      if (!wasDone && _isSubtaskCompleted(subtask)) {
+        rewards += 1;
+      }
     }
-    task.status = target;
+    task.status = completed ? TaskStatus.done : TaskStatus.todo;
     task.syncStatusFromSubtasks();
+    if (completed && !wasCompleted && _isTaskCompleted(task)) {
+      rewards += 2;
+    }
     notifyListeners();
+  }
+
+  Future<void> toggleTaskCompletion(int taskId) async {
+    final task = findTask(taskId);
+    if (task == null) return;
+    final shouldComplete = !_isTaskCompleted(task);
+    await setTaskCompletion(taskId, shouldComplete);
   }
 }
 

@@ -51,9 +51,15 @@ class TasksService {
       if (title != null) 'title': title,
       if (reaction != null) 'parent_reaction': reaction,
     };
-    final data = await _client.postAny('/tasks/subtasks/$subtaskId', body);
+    final data = await _client.patchAny('/tasks/subtasks/$subtaskId', body);
     return _SubtaskDto.fromJson(Map<String, dynamic>.from(data));
   }
+  Future<String> updateTaskStatus(int taskId, {required String status}) async {
+    final data = await _client.patchAny('/tasks/$taskId', {'status': status});
+    final map = Map<String, dynamic>.from(data as Map);
+    return map['status'] as String;
+  }
+
 }
 
 class _SubtaskDto {

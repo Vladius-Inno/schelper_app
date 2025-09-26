@@ -66,6 +66,29 @@ class ApiClient {
     throw ApiException(msg, statusCode: resp.statusCode);
   }
 
+  Future<dynamic> patch(String path, Map<String, dynamic> body,
+      {Map<String, String>? headers}) async {
+    final resp = await _client.patch(
+      _uri(path),
+      headers: {
+        'Content-Type': 'application/json',
+        if (headers != null) ...headers,
+      },
+      body: jsonEncode(body),
+    );
+    if (resp.statusCode >= 200 && resp.statusCode < 300) {
+      return resp.body.isEmpty ? <String, dynamic>{} : jsonDecode(resp.body);
+    }
+    String msg = 'HTTP ${resp.statusCode}';
+    try {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map && decoded['detail'] != null) {
+        msg = decoded['detail'].toString();
+      }
+    } catch (_) {}
+    throw ApiException(msg, statusCode: resp.statusCode);
+  }
+
   // Backwards-compatible helpers for Map-shaped responses
   Future<Map<String, dynamic>> getJson(String path, {Map<String, String>? headers}) async {
     final data = await get(path, headers: headers);

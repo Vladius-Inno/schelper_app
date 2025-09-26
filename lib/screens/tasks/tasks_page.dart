@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../models/tasks.dart';
 import '../../store/tasks_store.dart';
+import '../../utils/status_utils.dart';
 import 'day_tasks_page.dart';
 
 class TasksPage extends StatefulWidget {
@@ -58,7 +59,7 @@ class _TasksPageState extends State<TasksPage> {
               height: MediaQuery.of(context).size.height * 0.4,
               child: Center(
                 child: Text(
-                  'No tasks yet',
+                  'Задач пока нет',
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
@@ -157,6 +158,9 @@ class _SubjectPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final secondary = theme.textTheme.bodyMedium?.color?.withOpacity(0.7);
     final text = task.firstLine.isEmpty ? 'Без названия' : task.firstLine;
+    final status = task.aggregatedStatus;
+    final statusLabel = taskStatusTitle(status);
+    final statusColor = taskStatusColor(status, theme);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -169,35 +173,70 @@ class _SubjectPreview extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    task.subjectName,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        task.subjectName,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: secondary,
-                    ),
-                  ),
+                const SizedBox(height: 4),
+                Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: secondary),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
+          Icon(
+            _statusIcon(status),
+            color: statusColor,
+            size: 20,
+          ),
         ],
       ),
     );
+  }
+}
+
+IconData _statusIcon(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.todo:
+      return Icons.radio_button_unchecked;
+    case TaskStatus.inProgress:
+      return Icons.timelapse;
+    case TaskStatus.done:
+      return Icons.check_circle_outline;
+    case TaskStatus.checked:
+      return Icons.verified_outlined;
   }
 }

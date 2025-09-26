@@ -11,8 +11,9 @@ class SubjectsService {
   SubjectsService({AuthorizedApiClient? client})
     : _client = client ?? AuthorizedApiClient();
 
-  Future<List<SubjectInfo>> fetchSubjects() async {
-    final data = await _client.getAny('/subjects');
+  Future<List<SubjectInfo>> fetchSubjects({int? childId}) async {
+    final query = childId != null ? '?child_id=$childId' : '';
+    final data = await _client.getAny('/subjects$query');
     if (data is List) {
       return data
           .map(

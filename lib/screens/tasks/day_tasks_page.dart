@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../models/tasks.dart';
 import '../../store/tasks_store.dart';
+import '../../utils/status_utils.dart';
 import 'task_details_page.dart';
 
 class DayTasksPage extends StatefulWidget {
@@ -72,6 +73,9 @@ class _SubjectTaskCard extends StatelessWidget {
     final theme = Theme.of(context);
     final progress = '(${task.doneCount} of ${task.totalSubtasks} done)';
     final status = task.aggregatedStatus;
+    final isCompleted = isTaskCompletedStatus(status);
+    final statusLabel = taskStatusTitle(status);
+    final statusColor = taskStatusColor(status, theme);
     final title = task.firstLine.isEmpty ? (task.title ?? '') : task.firstLine;
 
     return InkWell(
@@ -101,11 +105,35 @@ class _SubjectTaskCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          task.subjectName,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                task.subjectName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -118,14 +146,14 @@ class _SubjectTaskCard extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Сменить статус',
-                    onPressed: task.subtasks.isEmpty
-                        ? null
-                        : () async {
-                            await tasksStore.toggleTaskStatus(task.id);
-                          },
+                    tooltip: isCompleted
+                        ? 'Снять отметку выполнения'
+                        : 'Отметить задачу выполненной',
+                    onPressed: () async {
+                      await tasksStore.toggleTaskCompletion(task.id);
+                    },
                     icon: Icon(_statusIcon(status)),
-                    color: _statusColor(theme, status),
+                    color: statusColor,
                   ),
                 ],
               ),
@@ -139,30 +167,17 @@ class _SubjectTaskCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  IconData _statusIcon(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.todo:
-        return Icons.radio_button_unchecked;
-      case TaskStatus.inProgress:
-        return Icons.timelapse;
-      case TaskStatus.done:
-        return Icons.check_circle_outline;
-      case TaskStatus.checked:
-        return Icons.verified_outlined;
-    }
-  }
-
-  Color _statusColor(ThemeData theme, TaskStatus status) {
-    switch (status) {
-      case TaskStatus.todo:
-        return theme.colorScheme.outline;
-      case TaskStatus.inProgress:
-        return theme.colorScheme.primary;
-      case TaskStatus.done:
-        return Colors.green;
-      case TaskStatus.checked:
-        return Colors.purple;
-    }
+IconData _statusIcon(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.todo:
+      return Icons.radio_button_unchecked;
+    case TaskStatus.inProgress:
+      return Icons.timelapse;
+    case TaskStatus.done:
+      return Icons.check_circle_outline;
+    case TaskStatus.checked:
+      return Icons.verified_outlined;
   }
 }
