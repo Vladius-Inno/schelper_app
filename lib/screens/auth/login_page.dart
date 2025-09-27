@@ -68,7 +68,7 @@ class _LoginPageState extends State<LoginPage> {
                         try {
                           await _auth.login(
                             email: _emailController.text.trim(),
-                            password: _passwordController.text,
+                            password: _passwordController.text.trim(),
                           );
                           if (!mounted) return;
                           context.go('/home');
