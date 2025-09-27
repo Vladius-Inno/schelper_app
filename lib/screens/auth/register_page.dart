@@ -93,7 +93,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           await _auth.register(
                             name: _nameController.text.trim(),
                             email: _emailController.text.trim(),
-                            password: _passwordController.text.trim(),
+                            password: _passwordController.text,
                             role: _role,
                           );
                           if (!mounted) return;
