@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/tasks.dart';
+import '../../models/homework_upload.dart';
 import '../../store/tasks_store.dart';
+import '../../services/api_client.dart';
 import '../../utils/status_utils.dart';
 import 'day_tasks_page.dart';
 import 'task_details_page.dart';
@@ -14,6 +17,9 @@ class TasksPage extends StatefulWidget {
 }
 
 class _TasksPageState extends State<TasksPage> {
+  bool _fabExpanded = false;
+  List<HomeworkUploadResult>? _lastUploadResults;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +37,270 @@ class _TasksPageState extends State<TasksPage> {
 
   Future<void> _refresh() async {
     await tasksStore.reloadCurrentWeek();
+  }
+
+  void _toggleFab() {
+    setState(() => _fabExpanded = !_fabExpanded);
+  }
+
+  void _collapseFab() {
+    if (_fabExpanded) {
+      setState(() => _fabExpanded = false);
+    }
+  }
+
+  Future<void> _openHomeworkComposer() async {
+    final childId = await tasksStore.ensureChildId();
+    if (!mounted) return;
+    if (childId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось определить ребёнка для загрузки домашнего задания')));
+      return;
+    }
+
+    final initialDate = DateTime.now().add(const Duration(days: 1));
+    final results = await showModalBottomSheet<List<HomeworkUploadResult>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return _HomeworkTextSheet(
+          initialDate: initialDate,
+          onSubmit: (text, date) => tasksStore.submitHomework(
+            childId: childId,
+            text: text,
+            date: date,
+          ),
+        );
+      },
+    );
+    if (!mounted || results == null) return;
+    if (results.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сервер не вернул новых заданий')),
+      );
+      return;
+    }
+    // Show results in a modal dialog instead of a top banner
+    final action = await _showUploadResultsDialogV3(results);
+    if (!mounted) return;
+    if (action == _UploadAction.goTo) {
+      final iso = _resolveIsoDateFromResultsV2(results);
+      if (iso != null) {
+        _collapseFab();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => DayTasksPage(isoDate: iso),
+          ),
+        );
+      }
+    }
+  }
+
+  String? _resolveIsoDateFromResults(List<HomeworkUploadResult> results) {
+    DateTime? best;
+    for (final entry in results) {
+      final taskPayload = entry.task;
+      if (taskPayload?.date != null) {
+        final d = taskPayload!.date!;
+        best = (best == null || d.isBefore(best!)) ? d : best;
+        continue;
+      }
+      final task = tasksStore.findTask(entry.taskId);
+      if (task != null) {
+        final d = task.date;
+        best = (best == null || d.isBefore(best!)) ? d : best;
+      }
+    }
+    if (best == null) return null;
+    return _toIso(best!);
+  }
+
+  String _toIso(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  String? _resolveIsoDateFromResultsV2(List<HomeworkUploadResult> results) {
+    DateTime? best;
+    final filtered = results.where((e) =>
+        e.status == HomeworkResultStatus.created ||
+        e.status == HomeworkResultStatus.updated);
+    for (final entry in filtered) {
+      final taskPayload = entry.task;
+      if (taskPayload?.date != null) {
+        final d = taskPayload!.date!;
+        best = (best == null || d.isBefore(best!)) ? d : best;
+        continue;
+      }
+      final task = tasksStore.findTask(entry.taskId);
+      if (task != null) {
+        final d = task.date;
+        best = (best == null || d.isBefore(best!)) ? d : best;
+      }
+    }
+    if (best == null) return null;
+    return _toIso(best!);
+  }
+
+  String _subjectNameForResult(HomeworkUploadResult entry) {
+    final task = tasksStore.findTask(entry.taskId);
+    if (task != null) return task.subjectName;
+    return tasksStore.subjectNameFor(entry.subjectId);
+  }
+
+  Future<_UploadAction?> _showUploadResultsDialogV3(
+    List<HomeworkUploadResult> results,
+  ) {
+    return showDialog<_UploadAction>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final canGo = results.any((e) =>
+            e.status == HomeworkResultStatus.created ||
+            e.status == HomeworkResultStatus.updated);
+        return AlertDialog(
+          title: Text(
+            'Статус импорта',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final entry in results)
+                  _HomeworkStatusRow(
+                    icon: _visualForStatus(entry.status, theme).icon,
+                    text: '${_subjectNameForResult(entry)} - ${_visualForStatus(entry.status, theme).label}',
+                    color: _visualForStatus(entry.status, theme).color,
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(_UploadAction.close),
+              child: const Text('Ok'),
+            ),
+            if (canGo)
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_UploadAction.goTo),
+                child: const Text('Перейти'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<_UploadAction?> _showUploadResultsDialogV2(
+    List<HomeworkUploadResult> results,
+  ) {
+    return showDialog<_UploadAction>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final canGo = results.any((e) =>
+            e.status == HomeworkResultStatus.created ||
+            e.status == HomeworkResultStatus.updated);
+        return AlertDialog(
+          title: Text(
+            'Статус импорта',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final entry in results)
+                  _HomeworkStatusRow(
+                    icon: _visualForStatus(entry.status, theme).icon,
+                    text:
+                        '${tasksStore.subjectNameFor(entry.subjectId)} — ${_visualForStatus(entry.status, theme).label}',
+                    color: _visualForStatus(entry.status, theme).color,
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(_UploadAction.close),
+              child: const Text('Ok'),
+            ),
+            if (canGo)
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_UploadAction.goTo),
+                child: const Text('Перейти'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  _StatusVisual _visualForStatus(
+    HomeworkResultStatus status,
+    ThemeData theme,
+  ) {
+    switch (status) {
+      case HomeworkResultStatus.created:
+        return _StatusVisual('✅', 'Создано', theme.colorScheme.primary);
+      case HomeworkResultStatus.updated:
+        return _StatusVisual('✏️', 'Обновлено', theme.colorScheme.secondary);
+      case HomeworkResultStatus.duplicate:
+        return _StatusVisual('⚠️', 'Дубликат', theme.colorScheme.error);
+    }
+  }
+
+  Future<_UploadAction?> _showUploadResultsDialog(
+    List<HomeworkUploadResult> results,
+  ) {
+    return showDialog<_UploadAction>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          title: Text(
+            'Статус импорта',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final entry in results)
+                  _HomeworkUploadSummary(
+                    results: [entry],
+                    resolveSubjectName: tasksStore.subjectNameFor,
+                    onDismiss: () {},
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(_UploadAction.close),
+              child: const Text('Ok'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(_UploadAction.goTo),
+              child: const Text('Перейти'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String _formatShortDate(DateTime date) {
@@ -75,6 +345,18 @@ class _TasksPageState extends State<TasksPage> {
       const SizedBox(height: 12),
     ];
 
+    if (_lastUploadResults != null && _lastUploadResults!.isNotEmpty) {
+      children.insert(
+        0,
+        _HomeworkUploadSummary(
+          results: _lastUploadResults!,
+          resolveSubjectName: tasksStore.subjectNameFor,
+          onDismiss: () => setState(() => _lastUploadResults = null),
+        ),
+      );
+      children.insert(1, const SizedBox(height: 12));
+    }
+
     if (tasksStore.loading) {
       children.add(
         const SizedBox(
@@ -107,7 +389,37 @@ class _TasksPageState extends State<TasksPage> {
       }
     }
 
-    return ListView(padding: const EdgeInsets.all(16), children: children);
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final listView = ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      children: children,
+    );
+
+    return Stack(
+      children: [
+        listView,
+        if (_fabExpanded)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _collapseFab,
+              child: Container(color: Colors.black.withOpacity(0.05)),
+            ),
+          ),
+        Positioned(
+          right: 16,
+          bottom: 16 + bottomInset,
+          child: _HomeworkFabMenu(
+            expanded: _fabExpanded,
+            onToggle: _toggleFab,
+            onTextPressed: () {
+              _collapseFab();
+              _openHomeworkComposer();
+            },
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -406,3 +718,500 @@ class _SubjectPreview extends StatelessWidget {
     );
   }
 }
+
+class _HomeworkUploadSummary extends StatelessWidget {
+  final List<HomeworkUploadResult> results;
+  final String Function(int subjectId) resolveSubjectName;
+  final VoidCallback onDismiss;
+
+  const _HomeworkUploadSummary({
+    required this.results,
+    required this.resolveSubjectName,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Домашка загружена',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Скрыть',
+                  onPressed: onDismiss,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final entry in results) _buildRow(theme, entry),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(ThemeData theme, HomeworkUploadResult entry) {
+    final visual = _statusVisual(entry.status, theme);
+    final subject = resolveSubjectName(entry.subjectId);
+    return _HomeworkStatusRow(
+      icon: visual.icon,
+      text: '$subject — ${visual.label}',
+      color: visual.color,
+    );
+  }
+
+  _StatusVisual _statusVisual(HomeworkResultStatus status, ThemeData theme) {
+    switch (status) {
+      case HomeworkResultStatus.created:
+        return _StatusVisual('✅', 'новое задание', theme.colorScheme.primary);
+      case HomeworkResultStatus.updated:
+        return _StatusVisual(
+          '🔄',
+          'добавлены подзадания',
+          theme.colorScheme.secondary,
+        );
+      case HomeworkResultStatus.duplicate:
+        return _StatusVisual(
+          '⚠️',
+          'пропускаем дубликат',
+          theme.colorScheme.error,
+        );
+    }
+  }
+}
+
+class _HomeworkStatusRow extends StatelessWidget {
+  final String icon;
+  final String text;
+  final Color color;
+
+  const _HomeworkStatusRow({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 20)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusVisual {
+  final String icon;
+  final String label;
+  final Color color;
+  const _StatusVisual(this.icon, this.label, this.color);
+}
+
+class _HomeworkTextSheet extends StatefulWidget {
+  final DateTime initialDate;
+  final Future<List<HomeworkUploadResult>> Function(String text, DateTime? date)
+  onSubmit;
+
+  const _HomeworkTextSheet({required this.initialDate, required this.onSubmit});
+
+  @override
+  State<_HomeworkTextSheet> createState() => _HomeworkTextSheetState();
+}
+
+class _HomeworkTextSheetState extends State<_HomeworkTextSheet> {
+  final TextEditingController _controller = TextEditingController();
+  DateTime? _selectedDate;
+  bool _isSubmitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = widget.initialDate;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final initial = _selectedDate ?? widget.initialDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 2),
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final value = data?.text?.trim();
+    if (value == null || value.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Буфер обмена пуст')));
+      return;
+    }
+    setState(() {
+      final current = _controller.text;
+      final text = current.isEmpty ? value : '$current\n$value';
+      _controller.text = text;
+      _controller.selection = TextSelection.collapsed(offset: text.length);
+    });
+  }
+
+  String _formatIso(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  String _formatDisplayDate(DateTime date) {
+    const months = [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ];
+    return '${date.day} ${months[date.month - 1]}';
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    final raw = _controller.text.trim();
+    if (raw.isEmpty) {
+      setState(() => _error = 'Добавь текст задания');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _isSubmitting = true;
+    });
+    final prepared = _selectedDate == null
+        ? raw
+        : 'На ${_formatIso(_selectedDate!)} дату: $raw';
+    try {
+      final results = await widget.onSubmit(prepared, _selectedDate);
+      if (!mounted) return;
+      Navigator.of(context).pop(results);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is ApiException ? error.message : error.toString();
+      setState(() {
+        _error = message;
+        _isSubmitting = false;
+      });
+    }
+  }
+
+  Widget _buildDateSelector(ThemeData theme) {
+    final selector = _selectedDate == null
+        ? TextButton.icon(
+            onPressed: _pickDate,
+            icon: const Icon(Icons.event_available_outlined),
+            label: const Text('Добавить дату'),
+          )
+        : Wrap(
+            spacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: _pickDate,
+                icon: const Icon(Icons.event_note_outlined),
+                label: Text(_formatDisplayDate(_selectedDate!)),
+              ),
+              IconButton(
+                tooltip: 'Очистить дату',
+                onPressed: () => setState(() => _selectedDate = null),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          );
+    return selector;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Добавь домашечку',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  _buildDateSelector(theme),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _controller,
+                minLines: 5,
+                maxLines: 10,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Опиши домашнее задание',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _isSubmitting ? null : _pasteFromClipboard,
+                  icon: const Icon(Icons.content_paste_go_outlined),
+                  label: const Text('Вставить из буфера'),
+                ),
+              ),
+              if (_error != null) ...[
+                Text(
+                  _error!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              FilledButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Отправить'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeworkFabMenu extends StatelessWidget {
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onTextPressed;
+
+  const _HomeworkFabMenu({
+    required this.expanded,
+    required this.onToggle,
+    required this.onTextPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                axisAlignment: -1.0,
+                child: child,
+              ),
+            );
+          },
+          child: expanded
+              ? Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _HomeworkFabOption(
+                        icon: Icons.edit_outlined,
+                        label: 'Текст',
+                        onTap: onTextPressed,
+                      ),
+                      const SizedBox(height: 8),
+                      const _HomeworkFabOption(
+                        icon: Icons.mic_none_outlined,
+                        label: 'Голос',
+                        enabled: false,
+                        // secondary: 'Скоро',
+                      ),
+                      const SizedBox(height: 8),
+                      const _HomeworkFabOption(
+                        icon: Icons.attach_file,
+                        label: 'Файл',
+                        enabled: false,
+                        // secondary: 'Скоро',
+                      ),
+                      const SizedBox(height: 8),
+                      const _HomeworkFabOption(
+                        icon: Icons.photo_camera_outlined,
+                        label: 'Фото',
+                        enabled: false,
+                        // secondary: 'Скоро',
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        Tooltip(
+          message: 'Нажми +, чтобы добавить ДЗ',
+          child: FloatingActionButton(
+            onPressed: onToggle,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) {
+                return RotationTransition(
+                  turns: Tween<double>(
+                    begin: 0.75,
+                    end: 1.0,
+                  ).animate(animation),
+                  child: FadeTransition(opacity: animation, child: child),
+                );
+              },
+              child: expanded
+                  ? const Icon(Icons.close, key: ValueKey('fab-close'))
+                  : const Icon(Icons.add, key: ValueKey('fab-add')),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeworkFabOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? secondary;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  const _HomeworkFabOption({
+    required this.icon,
+    required this.label,
+    this.secondary,
+    this.enabled = true,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final foreground = enabled ? colorScheme.onSurface : colorScheme.outline;
+    final iconColor = enabled ? colorScheme.primary : colorScheme.outline;
+    final background = enabled
+        ? colorScheme.primary.withOpacity(0.12)
+        : colorScheme.surfaceVariant;
+
+    return Material(
+      color: background,
+      elevation: enabled ? 2 : 0,
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(28),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: iconColor),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
+                    ),
+                  ),
+                  if (!enabled && secondary != null)
+                    Text(
+                      secondary!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.outline,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _UploadAction { close, goTo }
