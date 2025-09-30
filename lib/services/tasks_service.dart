@@ -78,6 +78,10 @@ class TasksService {
     final map = Map<String, dynamic>.from(data as Map);
     return map['status'] as String;
   }
+
+  Future<void> deleteTask(int taskId) async {
+    await _client.deleteAny('/tasks/$taskId');
+  }
 }
 
 class _SubtaskDto {

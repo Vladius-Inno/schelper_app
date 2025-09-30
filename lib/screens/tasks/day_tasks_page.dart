@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../models/tasks.dart';
 import '../../store/tasks_store.dart';
@@ -35,8 +35,8 @@ class _DayTasksPageState extends State<DayTasksPage> {
     final day = _day;
     if (day == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Задачи')),
-        body: const Center(child: Text('Нет задач на выбранный день')),
+        appBar: AppBar(title: const Text('Задания')),
+        body: const Center(child: Text('Список пуст')),
       );
     }
     return Scaffold(
@@ -47,7 +47,97 @@ class _DayTasksPageState extends State<DayTasksPage> {
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final task = day.tasks[index];
-          return _SubjectTaskCard(task: task);
+          return Dismissible(
+            key: ValueKey('task-${task.id}'),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: const Icon(Icons.delete, color: Colors.white),
+            ),
+            secondaryBackground: Container(
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: const Icon(Icons.delete, color: Colors.white),
+            ),
+            confirmDismiss: (direction) async {
+              if (direction != DismissDirection.endToStart) return false;
+              final result = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Удалить задание?'),
+                  content: const Text(
+                    'Все подзадания будут также удалены. Это действие нельзя отменить.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Отмена'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Удалить'),
+                    ),
+                  ],
+                ),
+              );
+              if (result != true) return false;
+              try {
+                final ok = await tasksStore.deleteTask(task.id);
+                if (!ok) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Ошибка при удалении. Попробуйте ещё раз',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        duration: Duration(seconds: 3),
+                        backgroundColor: Colors.black87,
+                      ),
+                    );
+                  }
+                  return false;
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Задание удалено',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      duration: Duration(seconds: 2),
+                      backgroundColor: Colors.black87,
+                    ),
+                  );
+                }
+                return true;
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Ошибка при удалении. Попробуйте ещё раз',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      duration: Duration(seconds: 3),
+                      backgroundColor: Colors.black87,
+                    ),
+                  );
+                }
+                return false;
+              }
+            },
+            child: _SubjectTaskCard(task: task),
+          );
         },
       ),
     );
@@ -108,8 +198,7 @@ class _SubjectTaskCard extends StatelessWidget {
                               child: Text(
                                 task.subjectName,
                                 style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                  fontWeight: FontWeight.w700),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -145,8 +234,8 @@ class _SubjectTaskCard extends StatelessWidget {
                   ),
                   IconButton(
                     tooltip: isCompleted
-                        ? 'Снять отметку выполнения'
-                        : 'Отметить задачу выполненной',
+                        ? 'Снять выполнение'
+                        : 'Отметить выполненным',
                     onPressed: () async {
                       await tasksStore.toggleTaskCompletion(task.id);
                     },

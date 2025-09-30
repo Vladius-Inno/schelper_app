@@ -487,6 +487,20 @@ class TasksStore extends ChangeNotifier {
     await setTaskCompletion(taskId, shouldComplete);
   }
 
+  Future<bool> deleteTask(int taskId) async {
+    try {
+      await _api.deleteTask(taskId);
+      _taskIndex.remove(taskId);
+      for (final day in days) {
+        day.tasks.removeWhere((t) => t.id == taskId);
+      }
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> deleteSubtask(int taskId, int subtaskId) async {
     final task = findTask(taskId);
     final subtask = findSubtask(taskId, subtaskId);
