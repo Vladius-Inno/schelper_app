@@ -43,7 +43,7 @@ class TasksStore extends ChangeNotifier {
   String subjectNameFor(int subjectId) {
     final value = _subjectNames[subjectId];
     if (value == null || value.isEmpty) {
-      return 'Предмет #$subjectId';
+      return 'РџСЂРµРґРјРµС‚ #$subjectId';
     }
     return value;
   }
@@ -318,7 +318,13 @@ class TasksStore extends ChangeNotifier {
         }
       }
     }
-    await reloadCurrentWeek();
+    _currentChildId ??= childId;
+    if (date != null) {
+      final targetWeekStart = _normalizeWeekStart(date);
+      await load(weekStart: targetWeekStart);
+    } else {
+      await reloadCurrentWeek();
+    }
     return results;
   }
 
@@ -483,3 +489,4 @@ class TasksStore extends ChangeNotifier {
 }
 
 final TasksStore tasksStore = TasksStore();
+
