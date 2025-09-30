@@ -69,6 +69,10 @@ class TasksService {
     return _SubtaskDto.fromJson(Map<String, dynamic>.from(data));
   }
 
+  Future<void> deleteSubtask(int subtaskId) async {
+    await _client.deleteAny('/tasks/subtasks/$subtaskId');
+  }
+
   Future<String> updateTaskStatus(int taskId, {required String status}) async {
     final data = await _client.patchAny('/tasks/$taskId', {'status': status});
     final map = Map<String, dynamic>.from(data as Map);
