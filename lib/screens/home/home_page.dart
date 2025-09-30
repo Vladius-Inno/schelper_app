@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../store/tasks_store.dart';
+import '../tasks/tasks_page.dart';
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -14,15 +17,27 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      _PageWrap(title: 'Лента', child: _PlaceholderCard(text: 'Добро пожаловать!')),
-      _PageWrap(title: 'Задачи', child: _PlaceholderCard(text: 'Ваши задания здесь')),
-      _PageWrap(title: 'Настройки', child: _PlaceholderCard(text: 'Настройки приложения')),
+      const _PageWrap(
+        title: 'Домой',
+        child: _PlaceholderCard(text: 'Лента скоро будет!'),
+      ),
+      const _TasksTab(),
+      const _PageWrap(
+        title: 'Настройки',
+        child: _PlaceholderCard(text: 'Настройки в разработке'),
+      ),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Домашечка'),
+        title: const Text('Shelper'),
         actions: [
+          if (_index == 1)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () => tasksStore.reloadCurrentWeek(),
+              tooltip: 'Обновить задачи',
+            ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () => context.push('/home/profile'),
@@ -35,9 +50,21 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Домой'),
-          NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'Задачи'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Настройки'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Домой',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: 'Задачи',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Настройки',
+          ),
         ],
       ),
     );
@@ -55,7 +82,12 @@ class _PageWrap extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 12),
           Expanded(child: child),
         ],
@@ -77,3 +109,10 @@ class _PlaceholderCard extends StatelessWidget {
   }
 }
 
+class _TasksTab extends StatelessWidget {
+  const _TasksTab();
+  @override
+  Widget build(BuildContext context) {
+    return const TasksPage();
+  }
+}

@@ -41,5 +41,28 @@ class AuthorizedApiClient {
       });
     });
   }
-}
 
+  Future<dynamic> getAny(String path) {
+    return _withAuthRetry((token) {
+      return _api.get(path, headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+    });
+  }
+
+  Future<dynamic> postAny(String path, Map<String, dynamic> body) {
+    return _withAuthRetry((token) {
+      return _api.post(path, body, headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+    });
+  }
+  Future<dynamic> patchAny(String path, Map<String, dynamic> body) {
+    return _withAuthRetry((token) {
+      return _api.patch(path, body, headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+    });
+  }
+
+}
