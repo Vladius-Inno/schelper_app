@@ -3,14 +3,22 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/tasks.dart';
+import '../services/authorized_api_client.dart';
+import '../models/homework_upload.dart';
 import '../services/subjects_service.dart';
+import '../services/homework_service.dart';
 import '../services/tasks_service.dart';
+import '../services/authorized_api_client.dart';
 
 class TasksStore extends ChangeNotifier {
   final TasksService _api;
   final SubjectsService _subjectsApi;
+  final HomeworkService _homeworkApi;
+  final AuthorizedApiClient _authApi;
   final Map<int, TaskItem> _taskIndex = {};
   int? _currentSubjectId;
+  Map<int, String> _subjectNames = {};
+  int? _currentChildId;
 
   List<DayTasks> days = [];
   int rewards = 0;
@@ -30,9 +38,60 @@ class TasksStore extends ChangeNotifier {
         current.day == normalizedNow.day;
   }
 
-  TasksStore({TasksService? api, SubjectsService? subjectsApi})
-    : _api = api ?? TasksService(),
-      _subjectsApi = subjectsApi ?? SubjectsService();
+  int? get currentChildId => _currentChildId;
+
+  String subjectNameFor(int subjectId) {
+    final value = _subjectNames[subjectId];
+    if (value == null || value.isEmpty) {
+      return 'Предмет #$subjectId';
+    }
+    return value;
+  }
+
+    void updateCurrentChildId(int id) {
+    _currentChildId = id;
+  }
+
+  Future<int?> ensureChildId() async {
+    if (_currentChildId != null) {
+      return _currentChildId;
+    }
+    try {
+      final profile = await _authApi.getJson('/users/me');
+      final resolved = _coerceId(profile['child_id']) ??
+          _coerceId(profile['child']) ??
+          _coerceId(profile['id']);
+      if (resolved != null) {
+        _currentChildId = resolved;
+      }
+    } catch (_) {
+      // ignore network errors; caller will handle null case
+    }
+    return _currentChildId;
+  }
+
+  int? _coerceId(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    if (value is Map) {
+      return _coerceId(value['id']);
+    }
+    return null;
+  }
+
+  TasksStore({
+    TasksService? api,
+    SubjectsService? subjectsApi,
+    HomeworkService? homeworkApi,
+    AuthorizedApiClient? authApi,
+  }) : _api = api ?? TasksService(),
+       _subjectsApi = subjectsApi ?? SubjectsService(),
+       _homeworkApi = homeworkApi ?? HomeworkService(),
+       _authApi = authApi ?? AuthorizedApiClient();
 
   DayTasks? findDayByIso(String iso) {
     for (final day in days) {
@@ -240,6 +299,29 @@ class TasksStore extends ChangeNotifier {
     }
   }
 
+  Future<List<HomeworkUploadResult>> submitHomework({
+    required int childId,
+    required String text,
+    DateTime? date,
+  }) async {
+    final results = await _homeworkApi.submitHomework(
+      childId: childId,
+      text: text,
+      date: date,
+    );
+    if (_currentChildId == null) {
+      for (final entry in results) {
+        final task = entry.task;
+        if (task != null) {
+          _currentChildId = task.childId;
+          break;
+        }
+      }
+    }
+    await reloadCurrentWeek();
+    return results;
+  }
+
   Future<void> _navigateToWeekWithTasks(int direction) async {
     if (direction == 0 || loading) {
       return;
@@ -250,14 +332,8 @@ class TasksStore extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      if (await _hasTasksForWeek(
-        weekStart: fallback,
-        subjectId: subjectId,
-      )) {
-        await load(
-          subjectId: subjectId,
-          weekStart: fallback,
-        );
+      if (await _hasTasksForWeek(weekStart: fallback, subjectId: subjectId)) {
+        await load(subjectId: subjectId, weekStart: fallback);
         return;
       }
       final alternativeWeek = await _findTaskDateBeyondWeek(
@@ -268,10 +344,7 @@ class TasksStore extends ChangeNotifier {
       if (alternativeWeek == null) {
         return;
       }
-      await load(
-        subjectId: subjectId,
-        weekStart: alternativeWeek,
-      );
+      await load(subjectId: subjectId, weekStart: alternativeWeek);
     } finally {
       if (loading) {
         loading = false;
