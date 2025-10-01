@@ -65,4 +65,12 @@ class AuthorizedApiClient {
     });
   }
 
+  Future<dynamic> deleteAny(String path) {
+    return _withAuthRetry((token) {
+      return _api.delete(path, headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+    });
+  }
+
 }

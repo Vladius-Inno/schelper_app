@@ -206,9 +206,87 @@ class _SubtaskTile extends StatelessWidget {
       );
     }
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
+    return Dismissible(
+      key: ValueKey('subtask-${subtask.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      confirmDismiss: (direction) async {
+        if (direction != DismissDirection.endToStart) return false;
+        final result = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Удалить подзадание?'),
+            content: const Text('Это действие нельзя отменить.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Удалить'),
+              ),
+            ],
+          ),
+        );
+        if (result != true) return false;
+        try {
+          final ok = await tasksStore.deleteSubtask(taskId, subtask.id);
+          if (!ok) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Ошибка при удалении. Попробуйте ещё раз',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  duration: Duration(seconds: 3),
+                  backgroundColor: Colors.black87,
+                ),
+              );
+            }
+            return false;
+          }
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Подзадание удалено',
+                  style: TextStyle(color: Colors.white),
+                ),
+                duration: Duration(seconds: 2),
+                backgroundColor: Colors.black87,
+              ),
+            );
+          }
+          return true;
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Ошибка при удалении. Попробуйте ещё раз',
+                  style: TextStyle(color: Colors.white),
+                ),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.black87,
+              ),
+            );
+          }
+          return false;
+        }
+      },
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Checkbox(
           value: _isCompleted,
@@ -243,6 +321,7 @@ class _SubtaskTile extends StatelessWidget {
             ),
           );
         },
+        ),
       ),
     );
   }
