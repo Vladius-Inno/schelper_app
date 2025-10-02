@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 class JobOut {
   final String type;
@@ -6,7 +6,7 @@ class JobOut {
   final int id;
   final int userId;
   final String status; // pending | running | done | failed
-  final Map<String, dynamic>? result;
+  final dynamic result;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -34,9 +34,7 @@ class JobOut {
       id: _asInt(json['id']),
       userId: _asInt(json['user_id']),
       status: json['status'] as String? ?? 'pending',
-      result: json['result'] is Map<String, dynamic>
-          ? json['result'] as Map<String, dynamic>
-          : null,
+      result: json.containsKey('result') ? json['result'] : null,
       createdAt: _asDate(json['created_at']),
       updatedAt: _asDate(json['updated_at']),
     );
@@ -61,4 +59,5 @@ class JobOut {
         'type': type,
       });
 }
+
 
