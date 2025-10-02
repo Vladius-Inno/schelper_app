@@ -110,11 +110,11 @@ class NotificationScheduler {
           'Пора приступать к Домашечке!',
           scheduled,
           details,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: AndroidScheduleMode.alarmClock,
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
           matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
         );
-        debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()} (exact)');
+        debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()} (alarmClock)');
       } on PlatformException catch (e) {
         if (e.code == 'exact_alarms_not_permitted') {
           debugPrint('NotificationScheduler: exact not permitted; falling back to inexact for id=$id');
@@ -134,6 +134,9 @@ class NotificationScheduler {
         }
       }
     }
+    // Diagnostics: log pending notifications count
+    final pending = await _fln.pendingNotificationRequests();
+    debugPrint('NotificationScheduler: pending notifications count=${pending.length}');
     debugPrint('NotificationScheduler.rescheduleFromPrefs: completed');
   }
 }
