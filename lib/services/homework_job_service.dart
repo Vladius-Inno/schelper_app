@@ -1,0 +1,93 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../models/job.dart';
+import '../services/job_polling_service.dart';
+import '../store/import_jobs_store.dart';
+
+/// Сервис импорта домашки с переводом на job + polling
+class HomeworkService {
+  final String baseUrl; // e.g. https://api.example.com
+  final Map<String, String> Function()? headersProvider; // e.g. auth headers
+  final http.Client _client;
+  final ImportJobsStore _store;
+  final JobPollingService _polling;
+
+  HomeworkService({
+    required this.baseUrl,
+    this.headersProvider,
+    http.Client? client,
+    ImportJobsStore? store,
+  })  : _client = client ?? http.Client(),
+        _store = store ?? ImportJobsStore.instance,
+        _polling = JobPollingService(
+          baseUrl: baseUrl,
+          headersProvider: headersProvider,
+          client: client,
+          store: store,
+        );
+
+  /// Создает job импорта и сохраняет job_id локально для восстановления
+  /// Возвращает созданный JobOut (содержит id и начальный статус)
+  Future<JobOut> createImportJob({
+    required String text,
+    int? userId,
+    int? childId,
+    Map<String, dynamic>? extraParams,
+  }) async {
+    final uri = Uri.parse("$baseUrl/import/homework");
+    final payload = <String, dynamic>{
+      'text': text,
+      if (userId != null) 'user_id': userId,
+      if (childId != null) 'child_id': childId,
+      ...?extraParams,
+    };
+    final res = await _client.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        ...?headersProvider?.call(),
+      },
+      body: jsonEncode(payload),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('POST /import/homework failed: ${res.statusCode}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final job = JobOut.fromJson(data);
+    if (job.id > 0) {
+      await _store.add(job.id);
+    }
+    return job;
+  }
+
+  /// Запускает polling для данного job_id.
+  /// Коллбеки: onUpdate для обновления статуса/индикатора, onDone/onFailed — финальные переходы.
+  void startPollingJob({
+    required int jobId,
+    required JobUpdateCallback onUpdate,
+    required void Function(JobOut job) onDone,
+    required void Function(JobOut job) onFailed,
+  }) {
+    _polling.startPolling(
+      jobId: jobId,
+      onUpdate: onUpdate,
+      onDone: onDone,
+      onFailed: onFailed,
+    );
+  }
+
+  /// Возобновляет опрос всех незавершенных задач после перезапуска приложения
+  Future<void> resumePendingJobs({
+    required JobUpdateCallback onUpdate,
+    required void Function(JobOut job) onDone,
+    required void Function(JobOut job) onFailed,
+  }) async {
+    await _polling.resumePending(
+      onUpdate: onUpdate,
+      onDone: onDone,
+      onFailed: onFailed,
+    );
+  }
+}
