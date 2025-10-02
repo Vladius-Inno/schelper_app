@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'theme.dart';
+import 'package:flutter/foundation.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_page.dart';
 import 'screens/auth/register_page.dart';
@@ -16,9 +17,16 @@ Future<void> main() async {
   // blocking the first frame (splash → Flutter UI transition).
   // Any failures are ignored so startup isn't affected.
   // ignore: discarded_futures
+  debugPrint('NotificationScheduler: kickoff init/reschedule');
   NotificationScheduler.init()
-      .then((_) => NotificationScheduler.rescheduleFromPrefs())
-      .catchError((_) {});
+      .then((_) async {
+        debugPrint('NotificationScheduler.init: completed');
+        await NotificationScheduler.rescheduleFromPrefs();
+        debugPrint('NotificationScheduler.rescheduleFromPrefs: completed');
+      })
+      .catchError((e, st) {
+        debugPrint('NotificationScheduler: init/reschedule failed: $e');
+      });
   runApp(const App());
 }
 

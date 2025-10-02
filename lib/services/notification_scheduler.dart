@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +23,7 @@ class NotificationScheduler {
   static Future<void> init() async {
     if (_initialized) return;
     // Local notifications
+    debugPrint('NotificationScheduler.init: start');
     const AndroidInitializationSettings androidInit = AndroidInitializationSettings('ic_alarm');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
     await _fln.initialize(initSettings);
@@ -42,10 +44,12 @@ class NotificationScheduler {
     // Alarm manager
     await AndroidAlarmManager.initialize();
     _initialized = true;
+    debugPrint('NotificationScheduler.init: alarm manager initialized');
   }
 
   // Public entry to reschedule according to saved preferences
   static Future<void> rescheduleFromPrefs() async {
+    debugPrint('NotificationScheduler.rescheduleFromPrefs: start');
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
 
@@ -53,17 +57,22 @@ class NotificationScheduler {
     for (var i = 0; i < 7; i++) {
       await AndroidAlarmManager.cancel(_alarmBaseId + i);
     }
+    debugPrint('NotificationScheduler.rescheduleFromPrefs: canceled existing alarms');
 
     if (raw == null) return;
     Map<String, dynamic> data;
     try {
       data = json.decode(raw) as Map<String, dynamic>;
     } catch (_) {
+      debugPrint('NotificationScheduler.rescheduleFromPrefs: malformed prefs');
       return;
     }
 
     final enabled = data['enabled'] == true;
-    if (!enabled) return;
+    if (!enabled) {
+      debugPrint('NotificationScheduler.rescheduleFromPrefs: disabled');
+      return;
+    }
 
     final int hour = (data['hour'] as int?) ?? 16;
     final int minute = (data['minute'] as int?) ?? 0;
@@ -85,6 +94,7 @@ class NotificationScheduler {
         rescheduleOnReboot: true,
         allowWhileIdle: true,
       );
+      debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at $startAt');
     }
   }
 }
@@ -108,6 +118,7 @@ DateTime _nextWeekdayAt(int weekdayIndex, int hour, int minute) {
 // Top-level callback for AndroidAlarmManager
 @pragma('vm:entry-point')
 Future<void> _alarmCallback() async {
+  debugPrint('NotificationScheduler._alarmCallback: fired');
   // Ensure plugin is available in background isolate
   const AndroidInitializationSettings androidInit = AndroidInitializationSettings('ic_alarm');
   const InitializationSettings initSettings = InitializationSettings(android: androidInit);
