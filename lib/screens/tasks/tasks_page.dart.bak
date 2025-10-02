@@ -5,12 +5,6 @@ import '../../models/tasks.dart';
 import '../../models/homework_upload.dart';
 import '../../store/tasks_store.dart';
 import '../../services/api_client.dart';
-import '../../services/auth_service.dart';
-import '../../services/homework_job_service.dart' as hwjobs;
-import '../../services/job_polling_service.dart';
-import '../../widgets/import_status_banner.dart';
-import '../../models/job.dart';
-import '../../config.dart';
 import '../../utils/status_utils.dart';
 import 'day_tasks_page.dart';
 import 'task_details_page.dart';
@@ -25,20 +19,12 @@ class TasksPage extends StatefulWidget {
 class _TasksPageState extends State<TasksPage> {
   bool _fabExpanded = false;
   List<HomeworkUploadResult>? _lastUploadResults;
-  // Import job tracking
-  bool _showImportBanner = false;
-  String _importBannerMessage = '';
-  int? _activeJobId;
-  hwjobs.HomeworkService? _jobService;
-  String? _authToken;
 
   @override
   void initState() {
     super.initState();
     tasksStore.addListener(_onChanged);
     tasksStore.load();
-    // Prepare job service and resume pending jobs, if any
-    _setupJobServiceAndResume();
   }
 
   @override
@@ -63,151 +49,6 @@ class _TasksPageState extends State<TasksPage> {
     }
   }
 
-  Future<void> _setupJobServiceAndResume() async {
-    await _ensureJobServiceReady();
-    final service = _jobService;
-    if (service == null) return;
-    await service.resumePendingJobs(
-      onUpdate: (job, elapsed) {
-        setState(() {
-          _activeJobId = job.id;
-          _showImportBanner = true;
-          _importBannerMessage = statusMessageForElapsed(elapsed);
-        });
-      },
-      onDone: (job) async {
-        await _handleJobCompletion(job);
-      },
-      onFailed: (job) async {
-        await _handleJobFailure(job);
-      },
-    );
-    
-    // Hand off to background job; stop here
-    return;
-  }
-
-  Future<void> _ensureJobServiceReady() async {
-    if (_jobService != null) return;
-    // Fetch token once
-    _authToken ??= await AuthService().getAccessToken();
-    _jobService = hwjobs.HomeworkService(
-      baseUrl: AppConfig.baseUrl,
-      headersProvider: () => {
-        if (_authToken != null) 'Authorization': 'Bearer ${_authToken!}',
-      },
-    );
-  }
-
-  void _startPolling(JobOut job) {
-    setState(() {
-      _activeJobId = job.id;
-      _showImportBanner = true;
-      _importBannerMessage = statusMessageForElapsed(const Duration(seconds: 0));
-    });
-    final service = _jobService;
-    if (service == null) return;
-    service.startPollingJob(
-      jobId: job.id,
-      onUpdate: (j, elapsed) {
-        setState(() {
-          _importBannerMessage = statusMessageForElapsed(elapsed);
-        });
-      },
-      onDone: (j) async {
-        await _handleJobCompletion(j);
-      },
-      onFailed: (j) async {
-        await _handleJobFailure(j);
-      },
-    );
-  }
-
-  Future<void> _handleJobCompletion(JobOut job) async {
-    if (!mounted) return;
-    // Hide banner
-    setState(() {
-      _showImportBanner = false;
-      _importBannerMessage = '';
-      _activeJobId = null;
-    });
-    // Parse results
-    final results = _parseResultsFromJob(job);
-    
-    /*
-    if (false && results.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Импорт завершён, но результатов нет')),
-      );
-      return;
-    }
-    */
-    // Refresh tasks (current week by default)
-    await tasksStore.reloadCurrentWeek();
-    // Show existing result dialog
-    final action = await _showUploadResultsDialogV3(results);
-    if (!mounted) return;
-    if (action == _UploadAction.goTo) {
-      final iso = _resolveIsoDateFromResultsV2(results);
-      if (iso != null) {
-        // Ensure the week containing the imported homework is loaded
-        final date = DateTime.tryParse(iso);
-        if (date != null) {
-          await tasksStore.load(weekStart: date);
-        }
-        _collapseFab();
-        if (!mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => DayTasksPage(isoDate: iso),
-          ),
-        );
-      }
-    }
-    
-  }
-
-  Future<void> _handleJobFailure(JobOut job) async {
-    if (!mounted) return;
-    setState(() {
-      _showImportBanner = false;
-      _importBannerMessage = '';
-      _activeJobId = null;
-    });
-    final detail = job.result != null ? job.result.toString() : 'Неизвестная ошибка';
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Не удалось импортировать'),
-        content: Text(detail),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Ок'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<HomeworkUploadResult> _parseResultsFromJob(JobOut job) {
-    final dynamic result = job.result;
-    if (result == null) return const [];
-    List<dynamic>? list;
-    if (result is List) {
-      list = List<dynamic>.from(result);
-    } else if (result is Map<String, dynamic>) {
-      final inner = result['data'];
-      if (inner is List) list = inner;
-    }
-    if (list == null) return const [];
-    return list
-        .map((item) => HomeworkUploadResult.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ))
-        .toList(growable: false);
-  }
-
   Future<void> _openHomeworkComposer() async {
     final childId = await tasksStore.ensureChildId();
     if (!mounted) return;
@@ -217,37 +58,27 @@ class _TasksPageState extends State<TasksPage> {
     }
 
     final initialDate = DateTime.now().add(const Duration(days: 1));
-    await showModalBottomSheet<void>(
+    final results = await showModalBottomSheet<List<HomeworkUploadResult>>(
       context: context,
       isScrollControlled: true,
       builder: (context) {
         return _HomeworkTextSheet(
           initialDate: initialDate,
-          onSubmit: (text, date) async {
-            await _ensureJobServiceReady();
-            final service = _jobService;
-            if (service == null) {
-              throw ApiException('Service not ready');
-            }
-            final job = await service.createImportJob(
-              text: text,
-              childId: childId,
-            );
-            _startPolling(job);
-          },
+          onSubmit: (text, date) => tasksStore.submitHomework(
+            childId: childId,
+            text: text,
+            date: date,
+          ),
         );
       },
     );
-    // legacy flow below is disabled; keep stub for analyzer
-    final List<HomeworkUploadResult> results = const [];
-    // if (!mounted || results == null) return;
-    if (false && results.isEmpty) {
+    if (!mounted || results == null) return;
+    if (results.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Сервер не вернул новых заданий')),
       );
       return;
     }
-    if (false) {
     // Show results in a modal dialog instead of a top banner
     final action = await _showUploadResultsDialogV3(results);
     if (!mounted) return;
@@ -261,7 +92,6 @@ class _TasksPageState extends State<TasksPage> {
           ),
         );
       }
-    }
     }
   }
 
@@ -504,8 +334,16 @@ class _TasksPageState extends State<TasksPage> {
         ? null
         : () => tasksStore.loadCurrentWeek();
 
-    // Build scrollable content children (excluding fixed header)
-    final children = <Widget>[];
+    final children = <Widget>[
+      _WeekSwitcher(
+        label: weekLabel,
+        isLoading: tasksStore.loading,
+        onPrevious: prevHandler,
+        onNext: nextHandler,
+        onReset: resetHandler,
+      ),
+      const SizedBox(height: 12),
+    ];
 
     if (_lastUploadResults != null && _lastUploadResults!.isNotEmpty) {
       children.insert(
@@ -553,41 +391,13 @@ class _TasksPageState extends State<TasksPage> {
 
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final listView = ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: children,
-    );
-
-    // Fixed header with week switcher and (optional) import status banner
-    final header = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _WeekSwitcher(
-            label: weekLabel,
-            isLoading: tasksStore.loading,
-            onPrevious: prevHandler,
-            onNext: nextHandler,
-            onReset: resetHandler,
-          ),
-          if (_showImportBanner) const SizedBox(height: 8),
-          if (_showImportBanner)
-            ImportStatusBanner(message: _importBannerMessage),
-        ],
-      ),
     );
 
     return Stack(
       children: [
-        // Layout: fixed header on top, scrollable content below
-        Column(
-          children: [
-            header,
-            const SizedBox(height: 12),
-            Expanded(child: listView),
-          ],
-        ),
+        listView,
         if (_fabExpanded)
           Positioned.fill(
             child: GestureDetector(
@@ -1029,7 +839,8 @@ class _StatusVisual {
 
 class _HomeworkTextSheet extends StatefulWidget {
   final DateTime initialDate;
-  final Future<void> Function(String text, DateTime? date) onSubmit;
+  final Future<List<HomeworkUploadResult>> Function(String text, DateTime? date)
+  onSubmit;
 
   const _HomeworkTextSheet({required this.initialDate, required this.onSubmit});
 
@@ -1127,9 +938,9 @@ class _HomeworkTextSheetState extends State<_HomeworkTextSheet> {
         ? raw
         : 'На ${_formatIso(_selectedDate!)} дату: $raw';
     try {
-      await widget.onSubmit(prepared, _selectedDate);
+      final results = await widget.onSubmit(prepared, _selectedDate);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(results);
     } catch (error) {
       if (!mounted) return;
       final message = error is ApiException ? error.message : error.toString();
@@ -1404,3 +1215,4 @@ class _HomeworkFabOption extends StatelessWidget {
 }
 
 enum _UploadAction { close, goTo }
+

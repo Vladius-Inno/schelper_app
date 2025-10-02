@@ -1,4 +1,4 @@
-import 'dart:math';
+﻿import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -243,6 +243,8 @@ class TasksStore extends ChangeNotifier {
           subjectNames.putIfAbsent(s.id, () => s.name.trim());
         }
       }
+
+      _subjectNames = subjectNames;
 
       final palette = [
         const Color(0xFF3B82F6),
@@ -494,6 +496,8 @@ class TasksStore extends ChangeNotifier {
       for (final day in days) {
         day.tasks.removeWhere((t) => t.id == taskId);
       }
+      // Remove empty day buckets so week view does not show blank day cards
+      days.removeWhere((d) => d.tasks.isEmpty);
       notifyListeners();
       return true;
     } catch (_) {
@@ -514,4 +518,6 @@ class TasksStore extends ChangeNotifier {
 }
 
 final TasksStore tasksStore = TasksStore();
+
+
 
