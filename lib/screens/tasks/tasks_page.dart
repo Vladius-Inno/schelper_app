@@ -504,19 +504,8 @@ class _TasksPageState extends State<TasksPage> {
         ? null
         : () => tasksStore.loadCurrentWeek();
 
-    final children = <Widget>[
-      if (_showImportBanner) const SizedBox(height: 8),
-      if (_showImportBanner)
-        ImportStatusBanner(message: _importBannerMessage),
-      _WeekSwitcher(
-        label: weekLabel,
-        isLoading: tasksStore.loading,
-        onPrevious: prevHandler,
-        onNext: nextHandler,
-        onReset: resetHandler,
-      ),
-      const SizedBox(height: 12),
-    ];
+    // Build scrollable content children (excluding fixed header)
+    final children = <Widget>[];
 
     if (_lastUploadResults != null && _lastUploadResults!.isNotEmpty) {
       children.insert(
@@ -564,13 +553,41 @@ class _TasksPageState extends State<TasksPage> {
 
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final listView = ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
       children: children,
+    );
+
+    // Fixed header with week switcher and (optional) import status banner
+    final header = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _WeekSwitcher(
+            label: weekLabel,
+            isLoading: tasksStore.loading,
+            onPrevious: prevHandler,
+            onNext: nextHandler,
+            onReset: resetHandler,
+          ),
+          if (_showImportBanner) const SizedBox(height: 8),
+          if (_showImportBanner)
+            ImportStatusBanner(message: _importBannerMessage),
+        ],
+      ),
     );
 
     return Stack(
       children: [
-        listView,
+        // Layout: fixed header on top, scrollable content below
+        Column(
+          children: [
+            header,
+            const SizedBox(height: 12),
+            Expanded(child: listView),
+          ],
+        ),
         if (_fabExpanded)
           Positioned.fill(
             child: GestureDetector(
