@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest_all.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 // Key used by notifications settings page
 const String _prefsKey = 'notifications.homework_reminder';
@@ -41,10 +42,19 @@ class NotificationScheduler {
     // flutter_local_notifications 17.x doesn't expose an Android permission API;
     // permission will need to be handled by the app if required.
 
-    // Alarm manager
-    await AndroidAlarmManager.initialize();
+    // Timezone setup for zoned scheduling (no native plugin; use offset mapping)
+    try {
+      tzdata.initializeTimeZones();
+      final Duration offset = DateTime.now().timeZoneOffset;
+      final int hours = offset.inHours;
+      final String name = hours >= 0 ? 'Etc/GMT-${hours.abs()}' : 'Etc/GMT+${hours.abs()}';
+      tz.setLocalLocation(tz.getLocation(name));
+      debugPrint('NotificationScheduler.init: timezone set to $name');
+    } catch (e) {
+      debugPrint('NotificationScheduler.init: timezone init failed: $e');
+    }
     _initialized = true;
-    debugPrint('NotificationScheduler.init: alarm manager initialized');
+    debugPrint('NotificationScheduler.init: completed');
   }
 
   // Public entry to reschedule according to saved preferences
@@ -53,10 +63,8 @@ class NotificationScheduler {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
 
-    // Cancel any existing scheduled alarms for all weekdays first
-    for (var i = 0; i < 7; i++) {
-      await AndroidAlarmManager.cancel(_alarmBaseId + i);
-    }
+    // Cancel all scheduled notifications for this app
+    await _fln.cancelAll();
     debugPrint('NotificationScheduler.rescheduleFromPrefs: canceled existing alarms');
 
     if (raw == null) return;
@@ -79,33 +87,43 @@ class NotificationScheduler {
     final List daysRaw = (data['days'] as List?) ?? const [true, true, true, true, true, false, false];
     final List<bool> days = List<bool>.generate(7, (i) => i < daysRaw.length ? (daysRaw[i] == true) : false);
 
-    // Schedule weekly alarms for selected days
+    // Schedule weekly notifications using flutter_local_notifications
     for (var i = 0; i < 7; i++) {
       if (!days[i]) continue;
-      final startAt = _nextWeekdayAt(i, hour, minute);
+      final scheduled = _nextTzWeekdayAt(i, hour, minute);
       final id = _alarmBaseId + i;
-      await AndroidAlarmManager.periodic(
-        const Duration(days: 7),
-        id,
-        _alarmCallback,
-        startAt: startAt,
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
-        allowWhileIdle: true,
+
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: _channelDescription,
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: 'ic_alarm',
+        category: AndroidNotificationCategory.reminder,
       );
-      debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at $startAt');
+      const NotificationDetails details = NotificationDetails(android: androidDetails);
+
+      await _fln.zonedSchedule(
+        id,
+        'Напоминание',
+        'Пора приступать к Домашечке!',
+        scheduled,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      );
+      debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()}');
     }
   }
 }
 
 // Compute the next occurrence of weekday index [0=Mon..6=Sun] at [hour:minute]
-DateTime _nextWeekdayAt(int weekdayIndex, int hour, int minute) {
-  final now = DateTime.now();
-  // Flutter DateTime.weekday: Monday=1..Sunday=7
-  final targetWeekday = weekdayIndex + 1;
-  var scheduled = DateTime(now.year, now.month, now.day, hour, minute);
-  // advance to target weekday
+tz.TZDateTime _nextTzWeekdayAt(int weekdayIndex, int hour, int minute) {
+  final now = tz.TZDateTime.now(tz.local);
+  final targetWeekday = weekdayIndex + 1; // Monday=1..Sunday=7
+  var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
   int addDays = (targetWeekday - scheduled.weekday) % 7;
   if (addDays < 0) addDays += 7;
   scheduled = scheduled.add(Duration(days: addDays));
@@ -116,30 +134,4 @@ DateTime _nextWeekdayAt(int weekdayIndex, int hour, int minute) {
 }
 
 // Top-level callback for AndroidAlarmManager
-@pragma('vm:entry-point')
-Future<void> _alarmCallback() async {
-  debugPrint('NotificationScheduler._alarmCallback: fired');
-  // Ensure plugin is available in background isolate
-  const AndroidInitializationSettings androidInit = AndroidInitializationSettings('ic_alarm');
-  const InitializationSettings initSettings = InitializationSettings(android: androidInit);
-  await _fln.initialize(initSettings);
-
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    _channelId,
-    _channelName,
-    channelDescription: _channelDescription,
-    importance: Importance.high,
-    priority: Priority.high,
-    icon: 'ic_alarm',
-    category: AndroidNotificationCategory.reminder,
-  );
-  const NotificationDetails details = NotificationDetails(android: androidDetails);
-
-  // Show reminder notification
-  await _fln.show(
-    99001, // fixed ID; updates the existing reminder if still visible
-    'Напоминание',
-    'Пора приступать к Домашечке!',
-    details,
-  );
-}
+// No background callback needed when using zonedSchedule
