@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/job.dart';
 import '../store/import_jobs_store.dart';
+import 'auth_service.dart';
 
 typedef JobUpdateCallback = void Function(JobOut job, Duration elapsed);
 
@@ -31,6 +32,7 @@ class JobPollingService {
   final Map<String, String> Function()? headersProvider; // e.g. auth headers
   final http.Client _client;
   final ImportJobsStore _store;
+  final AuthService _auth;
 
   final Map<int, _Tracker> _trackers = {};
 
@@ -39,12 +41,39 @@ class JobPollingService {
     this.headersProvider,
     http.Client? client,
     ImportJobsStore? store,
+    AuthService? auth,
   })  : _client = client ?? http.Client(),
-        _store = store ?? ImportJobsStore.instance;
+        _store = store ?? ImportJobsStore.instance,
+        _auth = auth ?? AuthService();
+
+  Future<Map<String, String>> _authHeaders({Map<String, String>? base}) async {
+    final headers = <String, String>{
+      if (base != null) ...base,
+    };
+    final token = await _auth.getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    } else if (headersProvider != null) {
+      headers.addAll(headersProvider!.call());
+    }
+    return headers;
+  }
 
   Future<JobOut> fetchJob(int jobId) async {
     final uri = Uri.parse("$baseUrl/jobs/$jobId");
-    final res = await _client.get(uri, headers: headersProvider?.call());
+    var res = await _client.get(
+      uri,
+      headers: await _authHeaders(base: headersProvider?.call()),
+    );
+    if (res.statusCode == 401) {
+      final newToken = await _auth.refreshToken();
+      if (newToken != null) {
+        res = await _client.get(
+          uri,
+          headers: await _authHeaders(base: headersProvider?.call()),
+        );
+      }
+    }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('GET /jobs/$jobId failed: ${res.statusCode}');
     }
@@ -123,4 +152,3 @@ class JobPollingService {
     }
   }
 }
-
