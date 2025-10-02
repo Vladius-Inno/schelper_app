@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -104,18 +105,38 @@ class NotificationScheduler {
       );
       const NotificationDetails details = NotificationDetails(android: androidDetails);
 
-      await _fln.zonedSchedule(
-        id,
-        'Напоминание',
-        'Пора приступать к Домашечке!',
-        scheduled,
-        details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-      );
-      debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()}');
+      try {
+        await _fln.zonedSchedule(
+          id,
+          'Напоминание',
+          'Пора приступать к Домашечке!',
+          scheduled,
+          details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        );
+        debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()} (exact)');
+      } on PlatformException catch (e) {
+        if (e.code == 'exact_alarms_not_permitted') {
+          debugPrint('NotificationScheduler: exact not permitted; falling back to inexact for id=$id');
+          await _fln.zonedSchedule(
+            id,
+            'Напоминание',
+            'Пора приступать к Домашечке!',
+            scheduled,
+            details,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+          );
+          debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()} (inexact)');
+        } else {
+          debugPrint('NotificationScheduler: schedule failed for id=$id error=${e.code} ${e.message}');
+        }
+      }
     }
+    debugPrint('NotificationScheduler.rescheduleFromPrefs: completed');
   }
 }
 
