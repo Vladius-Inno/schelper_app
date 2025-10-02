@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../store/tasks_store.dart';
 import '../tasks/tasks_page.dart';
+import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,30 +19,27 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const _PageWrap(
-        title: 'Домой',
-        child: _PlaceholderCard(text: 'Лента скоро будет!'),
+        title: '�����',
+        child: _PlaceholderCard(text: '���� ᪮� �㤥�!'),
       ),
       const _TasksTab(),
-      const _PageWrap(
-        title: 'Настройки',
-        child: _PlaceholderCard(text: 'Настройки в разработке'),
-      ),
+      const SettingsPage(),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Домашечка'),
+        title: Text(_index == 2 ? 'Настройки' : '�����窠'),
         actions: [
           if (_index == 1)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () => tasksStore.reloadCurrentWeek(),
-              tooltip: 'Обновить задачи',
+              tooltip: '�������� �����',
             ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () => context.push('/home/profile'),
-            tooltip: 'Профиль',
+            tooltip: '��䨫�',
           ),
         ],
       ),
@@ -53,17 +51,17 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
-            label: 'Домой',
+            label: '�����',
           ),
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment),
-            label: 'Задачи',
+            label: '�����',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'Настройки',
+            label: '����ன��',
           ),
         ],
       ),
@@ -116,3 +114,4 @@ class _TasksTab extends StatelessWidget {
     return const TasksPage();
   }
 }
+

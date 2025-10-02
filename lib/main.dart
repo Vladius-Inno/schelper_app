@@ -7,6 +7,7 @@ import 'screens/auth/login_page.dart';
 import 'screens/auth/register_page.dart';
 import 'screens/home/home_page.dart';
 import 'screens/home/profile_page.dart';
+import 'screens/home/notifications_settings_page.dart';
 
 void main() {
   runApp(const App());
@@ -39,6 +40,10 @@ class App extends StatelessWidget {
             GoRoute(
               path: 'profile',
               builder: (context, state) => const ProfilePage(),
+            ),
+            GoRoute(
+              path: 'settings/notifications',
+              builder: (context, state) => const NotificationsSettingsPage(),
             ),
           ],
         ),
