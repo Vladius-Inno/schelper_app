@@ -43,14 +43,13 @@ class NotificationScheduler {
     // flutter_local_notifications 17.x doesn't expose an Android permission API;
     // permission will need to be handled by the app if required.
 
-    // Timezone setup for zoned scheduling (no native plugin; use offset mapping)
+    // Timezone setup for zoned scheduling using native timezone id
     try {
       tzdata.initializeTimeZones();
-      final Duration offset = DateTime.now().timeZoneOffset;
-      final int hours = offset.inHours;
-      final String name = hours >= 0 ? 'Etc/GMT-${hours.abs()}' : 'Etc/GMT+${hours.abs()}';
-      tz.setLocalLocation(tz.getLocation(name));
-      debugPrint('NotificationScheduler.init: timezone set to $name');
+      final tz.Location loc = await _resolveLocalTzLocation();
+      tz.setLocalLocation(loc);
+      final now = tz.TZDateTime.now(tz.local);
+      debugPrint('NotificationScheduler.init: timezone set to ${loc.name} (offset=${now.timeZoneOffset})');
     } catch (e) {
       debugPrint('NotificationScheduler.init: timezone init failed: $e');
     }
@@ -100,7 +99,6 @@ class NotificationScheduler {
         channelDescription: _channelDescription,
         importance: Importance.high,
         priority: Priority.high,
-        icon: 'ic_alarm',
         category: AndroidNotificationCategory.reminder,
       );
       const NotificationDetails details = NotificationDetails(android: androidDetails);
@@ -138,6 +136,55 @@ class NotificationScheduler {
     }
     debugPrint('NotificationScheduler.rescheduleFromPrefs: completed');
   }
+}
+
+Future<String?> _getNativeTimeZoneId() async {
+  try {
+    const channel = MethodChannel('schelper/timezone');
+    final String? id = await channel.invokeMethod<String>('getTimeZone');
+    return id;
+  } catch (e) {
+    debugPrint('NotificationScheduler: failed to get native timezone: $e');
+    return null;
+  }
+}
+
+Future<tz.Location> _resolveLocalTzLocation() async {
+  // Try native IANA timezone first
+  final String? tzId = await _getNativeTimeZoneId();
+  if (tzId != null && tzId.isNotEmpty) {
+    try {
+      return tz.getLocation(tzId);
+    } catch (_) {
+      // Not an IANA ID; try to parse common variants like "GMT+03:00"
+      final parsed = _mapGmtLikeToEtc(tzId);
+      if (parsed != null) {
+        return tz.getLocation(parsed);
+      }
+    }
+  }
+
+  // Fallback: use current offset to map to Etc/GMT±H (note: inverted sign per IANA rules)
+  final Duration offset = DateTime.now().timeZoneOffset;
+  final int hours = offset.inHours;
+  final String name = hours >= 0 ? 'Etc/GMT-${hours.abs()}' : 'Etc/GMT+${hours.abs()}';
+  return tz.getLocation(name);
+}
+
+String? _mapGmtLikeToEtc(String id) {
+  // Accept forms: GMT, UTC, GMT+03:00, GMT-7, UTC+5, etc.
+  final upper = id.toUpperCase().trim();
+  if (upper == 'GMT' || upper == 'UTC') {
+    return 'Etc/GMT';
+  }
+  final regex = RegExp(r'^(GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$');
+  final m = regex.firstMatch(upper);
+  if (m == null) return null;
+  final sign = m.group(2)!; // "+" or "-"
+  final h = int.tryParse(m.group(3) ?? '0') ?? 0;
+  // IANA Etc/GMT uses inverted sign semantics
+  final inverted = sign == '+' ? '-' : '+';
+  return 'Etc/GMT$inverted$h';
 }
 
 // Compute the next occurrence of weekday index [0=Mon..6=Sun] at [hour:minute]
