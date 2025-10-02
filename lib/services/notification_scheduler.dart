@@ -21,8 +21,23 @@ final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
 
 class NotificationScheduler {
   static bool _initialized = false;
+  static Future<void>? _initializing;
 
   static Future<void> init() async {
+    if (_initialized) return;
+    if (_initializing != null) {
+      await _initializing;
+      return;
+    }
+    _initializing = _performInit();
+    try {
+      await _initializing;
+    } finally {
+      _initializing = null;
+    }
+  }
+
+  static Future<void> _performInit() async {
     if (_initialized) return;
     // Local notifications
     debugPrint('NotificationScheduler.init: start');
@@ -39,9 +54,9 @@ class NotificationScheduler {
     );
     final androidImpl = _fln.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.createNotificationChannel(channel);
-    // Note: On Android 13+ apps should request POST_NOTIFICATIONS at runtime.
-    // flutter_local_notifications 17.x doesn't expose an Android permission API;
-    // permission will need to be handled by the app if required.
+    if (androidImpl != null) {
+      await _ensureAndroidPermissions(androidImpl);
+    }
 
     // Timezone setup for zoned scheduling using native timezone id
     try {
@@ -57,9 +72,34 @@ class NotificationScheduler {
     debugPrint('NotificationScheduler.init: completed');
   }
 
+  static Future<void> _ensureAndroidPermissions(
+    AndroidFlutterLocalNotificationsPlugin androidImpl,
+  ) async {
+    try {
+      final bool? notificationsEnabled = await androidImpl.areNotificationsEnabled();
+      if (notificationsEnabled == false) {
+        final granted = await androidImpl.requestNotificationsPermission();
+        debugPrint('NotificationScheduler: requested POST_NOTIFICATIONS permission (granted: ${granted == true})');
+      }
+    } catch (e) {
+      debugPrint('NotificationScheduler: notification permission check failed: $e');
+    }
+
+    try {
+      final bool? exactPermitted = await androidImpl.canScheduleExactNotifications();
+      if (exactPermitted == false) {
+        final granted = await androidImpl.requestExactAlarmsPermission();
+        debugPrint('NotificationScheduler: requested SCHEDULE_EXACT_ALARM permission (granted: ${granted == true})');
+      }
+    } catch (e) {
+      debugPrint('NotificationScheduler: exact alarm permission check failed: $e');
+    }
+  }
+
   // Public entry to reschedule according to saved preferences
   static Future<void> rescheduleFromPrefs() async {
     debugPrint('NotificationScheduler.rescheduleFromPrefs: start');
+    await init();
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
 
@@ -110,11 +150,11 @@ class NotificationScheduler {
           'Пора приступать к Домашечке!',
           scheduled,
           details,
-          androidScheduleMode: AndroidScheduleMode.alarmClock,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
           matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
         );
-        debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()} (alarmClock)');
+        debugPrint('NotificationScheduler.rescheduleFromPrefs: scheduled id=$id at ${scheduled.toString()} (exactAllowWhileIdle)');
       } on PlatformException catch (e) {
         if (e.code == 'exact_alarms_not_permitted') {
           debugPrint('NotificationScheduler: exact not permitted; falling back to inexact for id=$id');
