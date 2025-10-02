@@ -19,8 +19,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const _PageWrap(
-        title: '�����',
-        child: _PlaceholderCard(text: '���� ᪮� �㤥�!'),
+        title: 'Домой',
+        child: _PlaceholderCard(text: 'Лента скоро будет'),
       ),
       const _TasksTab(),
       const SettingsPage(),
@@ -28,18 +28,18 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_index == 2 ? 'Настройки' : '�����窠'),
+        title: Text(_index == 2 ? 'Настройки' : 'Настройки'),
         actions: [
           if (_index == 1)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () => tasksStore.reloadCurrentWeek(),
-              tooltip: '�������� �����',
+              tooltip: 'Обновить',
             ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () => context.push('/home/profile'),
-            tooltip: '��䨫�',
+            tooltip: 'Профиль',
           ),
         ],
       ),
@@ -51,17 +51,17 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
-            label: '�����',
+            label: 'Домой',
           ),
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment),
-            label: '�����',
+            label: 'Задания',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: '����ன��',
+            label: 'Настройки',
           ),
         ],
       ),
