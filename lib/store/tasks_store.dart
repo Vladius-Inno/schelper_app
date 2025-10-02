@@ -244,6 +244,8 @@ class TasksStore extends ChangeNotifier {
         }
       }
 
+      _subjectNames = subjectNames;
+
       final palette = [
         const Color(0xFF3B82F6),
         const Color(0xFF10B981),
