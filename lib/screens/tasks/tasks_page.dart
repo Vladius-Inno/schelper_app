@@ -82,6 +82,7 @@ class _TasksPageState extends State<TasksPage> {
         await _handleJobFailure(job);
       },
     );
+    
     // Hand off to background job; stop here
     return;
   }
@@ -132,12 +133,15 @@ class _TasksPageState extends State<TasksPage> {
     });
     // Parse results
     final results = _parseResultsFromJob(job);
-    if (results.isEmpty) {
+    
+    /*
+    if (false && results.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Импорт завершён, но результатов нет')),
       );
       return;
     }
+    */
     // Refresh tasks
     await tasksStore.reloadCurrentWeek();
     // Show existing result dialog
@@ -155,6 +159,7 @@ class _TasksPageState extends State<TasksPage> {
         );
       }
     }
+    
   }
 
   Future<void> _handleJobFailure(JobOut job) async {
@@ -181,11 +186,11 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   List<HomeworkUploadResult> _parseResultsFromJob(JobOut job) {
-    final result = job.result;
+    final dynamic result = job.result;
     if (result == null) return const [];
     List<dynamic>? list;
     if (result is List) {
-      list = result;
+      list = List<dynamic>.from(result);
     } else if (result is Map<String, dynamic>) {
       final inner = result['data'];
       if (inner is List) list = inner;
@@ -228,13 +233,16 @@ class _TasksPageState extends State<TasksPage> {
         );
       },
     );
-    if (!mounted || results == null) return;
-    if (results.isEmpty) {
+    // legacy flow below is disabled; keep stub for analyzer
+    final List<HomeworkUploadResult> results = const [];
+    // if (!mounted || results == null) return;
+    if (false && results.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Сервер не вернул новых заданий')),
       );
       return;
     }
+    if (false) {
     // Show results in a modal dialog instead of a top banner
     final action = await _showUploadResultsDialogV3(results);
     if (!mounted) return;
@@ -248,6 +256,7 @@ class _TasksPageState extends State<TasksPage> {
           ),
         );
       }
+    }
     }
   }
 
