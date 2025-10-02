@@ -142,7 +142,7 @@ class _TasksPageState extends State<TasksPage> {
       return;
     }
     */
-    // Refresh tasks
+    // Refresh tasks (current week by default)
     await tasksStore.reloadCurrentWeek();
     // Show existing result dialog
     final action = await _showUploadResultsDialogV3(results);
@@ -150,6 +150,11 @@ class _TasksPageState extends State<TasksPage> {
     if (action == _UploadAction.goTo) {
       final iso = _resolveIsoDateFromResultsV2(results);
       if (iso != null) {
+        // Ensure the week containing the imported homework is loaded
+        final date = DateTime.tryParse(iso);
+        if (date != null) {
+          await tasksStore.load(weekStart: date);
+        }
         _collapseFab();
         if (!mounted) return;
         Navigator.of(context).push(
