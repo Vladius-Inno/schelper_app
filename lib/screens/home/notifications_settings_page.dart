@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:schelper_app/services/notification_scheduler.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -64,6 +65,8 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       'days': _days,
     };
     await prefs.setString(_prefsKey, json.encode(data));
+    // Update alarms immediately when settings change
+    await NotificationScheduler.rescheduleFromPrefs();
   }
 
   @override
@@ -161,4 +164,3 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     return '$hh:$mm';
   }
 }
-

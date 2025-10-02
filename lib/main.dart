@@ -8,8 +8,17 @@ import 'screens/auth/register_page.dart';
 import 'screens/home/home_page.dart';
 import 'screens/home/profile_page.dart';
 import 'screens/home/notifications_settings_page.dart';
+import 'services/notification_scheduler.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Initialize notifications and reschedule in the background to avoid
+  // blocking the first frame (splash → Flutter UI transition).
+  // Any failures are ignored so startup isn't affected.
+  // ignore: discarded_futures
+  NotificationScheduler.init()
+      .then((_) => NotificationScheduler.rescheduleFromPrefs())
+      .catchError((_) {});
   runApp(const App());
 }
 
