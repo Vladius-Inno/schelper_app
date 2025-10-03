@@ -68,14 +68,22 @@ class AuthService {
   Future<String?> refreshToken() async {
     final refresh = await getRefreshToken();
     if (refresh == null) return null;
-    final resp = await _api.postJson('/auth/refresh', {
-      'refresh_token': refresh,
-    });
-    final token = resp['token'] as String?;
-    if (token != null) {
-      await _storage.write(key: _kAccessToken, value: token);
+    try {
+      final resp = await _api
+          .postJson('/auth/refresh', {
+            'refresh_token': refresh,
+          })
+          // Avoid blocking app startup on slow/unreachable network
+          .timeout(const Duration(seconds: 6));
+      final token = resp['token'] as String?;
+      if (token != null) {
+        await _storage.write(key: _kAccessToken, value: token);
+      }
+      return token;
+    } catch (_) {
+      // Swallow errors on refresh during bootstrap to prevent splash hang
+      return null;
     }
-    return token;
   }
 }
 
