@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_native_timezone_updated_gradle/flutter_native_timezone.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -21,6 +21,9 @@ class LocalNotificationsService {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+  static const MethodChannel _timezoneChannel = MethodChannel(
+    'schelper/timezone',
+  );
 
   static const int _homeworkBaseId = 1000;
   static const int _testImmediateId = 2000;
@@ -217,13 +220,13 @@ class LocalNotificationsService {
     }
     debugPrint('[LocalNotificationsService] Configuring timezone');
     tz.initializeTimeZones();
+    final timezoneName = await _fetchLocalTimezone();
     try {
-      final timezoneName = await FlutterNativeTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timezoneName));
       debugPrint('[LocalNotificationsService] Timezone set to $timezoneName');
     } catch (error, stackTrace) {
       debugPrint(
-        '[LocalNotificationsService] Failed to determine timezone: $error',
+        '[LocalNotificationsService] Failed to apply timezone $timezoneName: $error',
       );
       debugPrintStack(stackTrace: stackTrace);
       tz.setLocalLocation(tz.getLocation('UTC'));
@@ -248,6 +251,29 @@ class LocalNotificationsService {
       scheduled = scheduled.add(const Duration(days: 7));
     }
     return scheduled;
+  }
+
+  Future<String> _fetchLocalTimezone() async {
+    try {
+      final timezoneName = await _timezoneChannel.invokeMethod<String>(
+        'getLocalTimezone',
+      );
+      if (timezoneName != null && timezoneName.isNotEmpty) {
+        debugPrint(
+          '[LocalNotificationsService] Platform timezone result: $timezoneName',
+        );
+        return timezoneName;
+      }
+      debugPrint(
+        '[LocalNotificationsService] Platform returned empty timezone, using UTC fallback',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[LocalNotificationsService] Failed to fetch timezone: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+    }
+    return 'UTC';
   }
 
   NotificationDetails _notificationDetails() {
