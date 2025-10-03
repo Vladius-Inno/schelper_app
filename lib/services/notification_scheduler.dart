@@ -41,7 +41,8 @@ class NotificationScheduler {
     if (_initialized) return;
     // Local notifications
     debugPrint('NotificationScheduler.init: start');
-    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('ic_alarm');
+    // Use a guaranteed-present launcher icon to avoid resource issues
+    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('ic_launcher');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
     await _fln.initialize(initSettings);
 
@@ -54,9 +55,10 @@ class NotificationScheduler {
     );
     final androidImpl = _fln.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.createNotificationChannel(channel);
-    if (androidImpl != null) {
-      await _ensureAndroidPermissions(androidImpl);
-    }
+    // Do NOT request runtime permissions at startup to avoid interrupting
+    // splash/navigation. We only check/log here; fallbacks are applied later.
+    // Skip proactive permission checks during startup to avoid any
+    // OEM-specific stalls. Permissions can be requested later by UI.
 
     // Timezone setup for zoned scheduling using native timezone id
     try {
@@ -77,20 +79,13 @@ class NotificationScheduler {
   ) async {
     try {
       final bool? notificationsEnabled = await androidImpl.areNotificationsEnabled();
-      if (notificationsEnabled == false) {
-        final granted = await androidImpl.requestNotificationsPermission();
-        debugPrint('NotificationScheduler: requested POST_NOTIFICATIONS permission (granted: ${granted == true})');
-      }
+      debugPrint('NotificationScheduler: notifications enabled=${notificationsEnabled ?? true}');
     } catch (e) {
       debugPrint('NotificationScheduler: notification permission check failed: $e');
     }
-
     try {
       final bool? exactPermitted = await androidImpl.canScheduleExactNotifications();
-      if (exactPermitted == false) {
-        final granted = await androidImpl.requestExactAlarmsPermission();
-        debugPrint('NotificationScheduler: requested SCHEDULE_EXACT_ALARM permission (granted: ${granted == true})');
-      }
+      debugPrint('NotificationScheduler: exact alarms permitted=${exactPermitted ?? true}');
     } catch (e) {
       debugPrint('NotificationScheduler: exact alarm permission check failed: $e');
     }
