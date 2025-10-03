@@ -131,6 +131,20 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             runSpacing: 8,
             children: _buildWeekdayCheckboxes(context),
           ),
+
+          const Divider(height: 32),
+
+          // 🔔 Тестовая кнопка
+          ElevatedButton.icon(
+            onPressed: () {
+              NotificationScheduler.testNotificationIn(const Duration(minutes: 2));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Тестовое уведомление запланировано через 2 минуты')),
+              );
+            },
+            icon: const Icon(Icons.notifications_active),
+            label: const Text('Проверить уведомление (через 2 мин)'),
+          ),
         ],
       ),
     );

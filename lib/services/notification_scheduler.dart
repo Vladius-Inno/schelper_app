@@ -179,6 +179,33 @@ class NotificationScheduler {
     debugPrint('NotificationScheduler: pending notifications count=${pending.length}');
     debugPrint('NotificationScheduler.rescheduleFromPrefs: completed');
   }
+
+  static Future<void> testNotificationIn(Duration delay) async {
+  await init();
+  final scheduled = tz.TZDateTime.now(tz.local).add(delay);
+
+  const androidDetails = AndroidNotificationDetails(
+    _channelId,
+    _channelName,
+    channelDescription: _channelDescription,
+    importance: Importance.high,
+    priority: Priority.high,
+  );
+  const details = NotificationDetails(android: androidDetails);
+
+  await _fln.zonedSchedule(
+    99999,
+    'Тестовое уведомление',
+    'Сработало в ${DateTime.now()}',
+    scheduled,
+    details,
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+  );
+
+  debugPrint('Test notification scheduled for $scheduled');
+}
+
 }
 
 Future<String?> _getNativeTimeZoneId() async {
