@@ -13,20 +13,19 @@ import 'services/notification_scheduler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize notifications and reschedule in the background to avoid
-  // blocking the first frame (splash → Flutter UI transition).
-  // Any failures are ignored so startup isn't affected.
+WidgetsBinding.instance.addPostFrameCallback((_) {
   // ignore: discarded_futures
-  debugPrint('NotificationScheduler: kickoff init/reschedule');
-  NotificationScheduler.init()
-      .then((_) async {
-        debugPrint('NotificationScheduler.init: completed');
-        await NotificationScheduler.rescheduleFromPrefs();
-        debugPrint('NotificationScheduler.rescheduleFromPrefs: completed');
-      })
-      .catchError((e, st) {
-        debugPrint('NotificationScheduler: init/reschedule failed: $e');
-      });
+  Future(() async {
+    debugPrint('NotificationScheduler: kickoff init/reschedule (post-frame)');
+    try {
+      await NotificationScheduler.init();
+      await NotificationScheduler.rescheduleFromPrefs();
+      debugPrint('NotificationScheduler: init/reschedule finished');
+    } catch (e) {
+      debugPrint('NotificationScheduler: init/reschedule failed: ' + e.toString());
+    }
+  });
+});
   runApp(const App());
 }
 
