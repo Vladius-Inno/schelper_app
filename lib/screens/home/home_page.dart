@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../store/tasks_store.dart';
 import '../tasks/tasks_page.dart';
+import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,24 +20,21 @@ class _HomePageState extends State<HomePage> {
     final pages = <Widget>[
       const _PageWrap(
         title: 'Домой',
-        child: _PlaceholderCard(text: 'Лента скоро будет!'),
+        child: _PlaceholderCard(text: 'Лента скоро будет'),
       ),
       const _TasksTab(),
-      const _PageWrap(
-        title: 'Настройки',
-        child: _PlaceholderCard(text: 'Настройки в разработке'),
-      ),
+      const SettingsPage(),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Домашечка'),
+        title: Text(_index == 2 ? 'Настройки' : 'Настройки'),
         actions: [
           if (_index == 1)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () => tasksStore.reloadCurrentWeek(),
-              tooltip: 'Обновить задачи',
+              tooltip: 'Обновить',
             ),
           IconButton(
             icon: const Icon(Icons.person_outline),
@@ -58,7 +56,7 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment),
-            label: 'Задачи',
+            label: 'Задания',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
@@ -116,3 +114,4 @@ class _TasksTab extends StatelessWidget {
     return const TasksPage();
   }
 }
+

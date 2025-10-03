@@ -7,8 +7,14 @@ import 'screens/auth/login_page.dart';
 import 'screens/auth/register_page.dart';
 import 'screens/home/home_page.dart';
 import 'screens/home/profile_page.dart';
+import 'screens/home/notifications_settings_page.dart';
+import 'services/local_notifications_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final notificationsService = LocalNotificationsService();
+  await notificationsService.initialize();
+  await notificationsService.refreshHomeworkRemindersFromPrefs();
   runApp(const App());
 }
 
@@ -20,10 +26,7 @@ class App extends StatelessWidget {
     final router = GoRouter(
       initialLocation: '/',
       routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const SplashScreen(),
-        ),
+        GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
         GoRoute(
           path: '/auth/login',
           builder: (context, state) => const LoginPage(),
@@ -39,6 +42,10 @@ class App extends StatelessWidget {
             GoRoute(
               path: 'profile',
               builder: (context, state) => const ProfilePage(),
+            ),
+            GoRoute(
+              path: 'settings/notifications',
+              builder: (context, state) => const NotificationsSettingsPage(),
             ),
           ],
         ),
