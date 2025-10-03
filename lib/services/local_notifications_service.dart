@@ -29,9 +29,15 @@ class LocalNotificationsService {
   static const int _testImmediateId = 2000;
   static const int _testFutureId = 2001;
   static const String _channelId = 'homework_reminders_channel';
-  static const String _channelName = 'Домашечка';
-  static const String _channelDescription = 'Homework reminder notifications';
+  static const String _channelName =
+      '\u0414\u043e\u043c\u0430\u0448\u0435\u0447\u043a\u0430';
+  static const String _channelDescription =
+      '\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f \u043e \u0414\u043e\u043c\u0430\u0448\u0435\u0447\u043a\u0435';
   static const String _payloadHomeworkReminder = 'homework_reminder';
+  static const String _notificationTitle =
+      '\u0414\u043e\u043c\u0430\u0448\u0435\u0447\u043a\u0430';
+  static const String _notificationBody =
+      '\u041f\u043e\u0440\u0430 \u043f\u0440\u0438\u0441\u0442\u0443\u043f\u0430\u0442\u044c \u043a \u0414\u043e\u043c\u0430\u0448\u0435\u0447\u043a\u0435!';
 
   bool _initialized = false;
   bool _timezoneInitialized = false;
@@ -123,8 +129,8 @@ class LocalNotificationsService {
       try {
         await _plugin.zonedSchedule(
           notificationId,
-          null,
-          'Пора приступать к Домашечке!',
+          _notificationTitle,
+          _notificationBody,
           scheduledDate,
           _notificationDetails(),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -143,6 +149,10 @@ class LocalNotificationsService {
         debugPrintStack(stackTrace: stackTrace);
       }
     }
+    final pending = await _plugin.pendingNotificationRequests();
+    debugPrint(
+      '[LocalNotificationsService] Pending scheduled IDs: ${pending.map((e) => e.id).toList()}',
+    );
   }
 
   Future<void> cancelHomeworkReminders() async {
@@ -159,8 +169,8 @@ class LocalNotificationsService {
     debugPrint('[LocalNotificationsService] showHomeworkReminderNow()');
     await _plugin.show(
       _testImmediateId,
-      null,
-      'Пора приступать к Домашечке!',
+      _notificationTitle,
+      _notificationBody,
       _notificationDetails(),
       payload: _payloadHomeworkReminder,
     );
@@ -174,8 +184,8 @@ class LocalNotificationsService {
     );
     await _plugin.zonedSchedule(
       _testFutureId,
-      null,
-      'Пора приступать к Домашечке!',
+      _notificationTitle,
+      _notificationBody,
       scheduledDate,
       _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
