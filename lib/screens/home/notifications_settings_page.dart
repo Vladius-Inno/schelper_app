@@ -2,17 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:schelper_app/constants/storage_keys.dart';
+import 'package:schelper_app/services/local_notifications_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
 
   @override
-  State<NotificationsSettingsPage> createState() => _NotificationsSettingsPageState();
+  State<NotificationsSettingsPage> createState() =>
+      _NotificationsSettingsPageState();
 }
 
 class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
-  static const _prefsKey = 'notifications.homework_reminder';
+  final LocalNotificationsService _notificationsService =
+      LocalNotificationsService();
 
   bool _enabled = true;
   TimeOfDay _time = const TimeOfDay(hour: 16, minute: 0);
@@ -27,15 +31,20 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _load() async {
+    debugPrint('[NotificationsSettingsPage] _load() start');
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
-    if (raw == null) return;
+    final raw = prefs.getString(homeworkReminderPrefsKey);
+    if (raw == null) {
+      debugPrint('[NotificationsSettingsPage] No stored settings found');
+      return;
+    }
     try {
       final Map<String, dynamic> data = json.decode(raw);
       final enabled = data['enabled'] as bool? ?? true;
       final hour = data['hour'] as int? ?? 16;
       final minute = data['minute'] as int? ?? 0;
-      final days = (data['days'] as List?)?.map((e) => e == true).toList() ??
+      final days =
+          (data['days'] as List?)?.map((e) => e == true).toList() ??
           [true, true, true, true, true, false, false];
       if (!mounted) return;
       setState(() {
@@ -45,36 +54,80 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           _days[i] = days[i] == true;
         }
       });
-    } catch (_) {
-      // ignore malformed
+      debugPrint(
+        '[NotificationsSettingsPage] Loaded settings enabled='
+        '$enabled time=${_formatTime(_time)} days=${_days.toString()}',
+      );
+      await _notificationsService.scheduleHomeworkReminders(
+        enabled: _enabled,
+        time: _time,
+        days: List<bool>.from(_days),
+      );
+      debugPrint(
+        '[NotificationsSettingsPage] Applied scheduled reminders from stored settings',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[NotificationsSettingsPage] Failed to parse stored settings: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
   void _scheduleSave() {
+    debugPrint('[NotificationsSettingsPage] _scheduleSave() queued');
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 350), _saveNow);
   }
 
   Future<void> _saveNow() async {
+    debugPrint('[NotificationsSettingsPage] _saveNow() start');
     final prefs = await SharedPreferences.getInstance();
     final data = {
       'enabled': _enabled,
       'hour': _time.hour,
       'minute': _time.minute,
-      'days': _days,
+      'days': List<bool>.from(_days),
     };
-    await prefs.setString(_prefsKey, json.encode(data));
+    try {
+      await prefs.setString(homeworkReminderPrefsKey, json.encode(data));
+      debugPrint('[NotificationsSettingsPage] Saved settings: $data');
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[NotificationsSettingsPage] Failed to persist settings: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      return;
+    }
+    try {
+      await _notificationsService.scheduleHomeworkReminders(
+        enabled: _enabled,
+        time: _time,
+        days: List<bool>.from(_days),
+      );
+      debugPrint(
+        '[NotificationsSettingsPage] Notifications rescheduled after save',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[NotificationsSettingsPage] Failed to reschedule notifications: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   @override
   void dispose() {
+    debugPrint('[NotificationsSettingsPage] dispose()');
     _saveDebounce?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600);
+    final titleStyle = Theme.of(
+      context,
+    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600);
     return Scaffold(
       appBar: AppBar(title: const Text('Уведомления')),
       body: ListView(
@@ -92,12 +145,17 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                           context: context,
                           initialTime: _time,
                           builder: (context, child) => MediaQuery(
-                            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                            data: MediaQuery.of(
+                              context,
+                            ).copyWith(alwaysUse24HourFormat: true),
                             child: child ?? const SizedBox.shrink(),
                           ),
                         );
                         if (picked != null) {
                           setState(() => _time = picked);
+                          debugPrint(
+                            '[NotificationsSettingsPage] Time updated to ${_formatTime(picked)}',
+                          );
                           _scheduleSave();
                         }
                       }
@@ -109,12 +167,18 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Включить напоминания', style: Theme.of(context).textTheme.bodyMedium),
+                  Text(
+                    'Включить напоминания',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                   const SizedBox(width: 8),
                   Switch(
                     value: _enabled,
                     onChanged: (v) {
                       setState(() => _enabled = v);
+                      debugPrint(
+                        '[NotificationsSettingsPage] Enabled toggled to $v',
+                      );
                       _scheduleSave();
                     },
                   ),
@@ -127,6 +191,39 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             spacing: 12,
             runSpacing: 8,
             children: _buildWeekdayCheckboxes(context),
+          ),
+          const SizedBox(height: 24),
+          Text('Тест уведомлений', style: titleStyle),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: _enabled
+                    ? () async {
+                        debugPrint(
+                          '[NotificationsSettingsPage] Trigger immediate test notification',
+                        );
+                        await _notificationsService.showHomeworkReminderNow();
+                      }
+                    : null,
+                child: const Text('Отправить сейчас'),
+              ),
+              OutlinedButton(
+                onPressed: _enabled
+                    ? () async {
+                        debugPrint(
+                          '[NotificationsSettingsPage] Schedule test notification in 2 minutes',
+                        );
+                        await _notificationsService.scheduleHomeworkReminderIn(
+                          const Duration(minutes: 2),
+                        );
+                      }
+                    : null,
+                child: const Text('Через 2 минуты'),
+              ),
+            ],
           ),
         ],
       ),
@@ -145,7 +242,11 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             onChanged: disabled
                 ? null
                 : (v) {
-                    setState(() => _days[i] = v ?? false);
+                    final newValue = v ?? false;
+                    setState(() => _days[i] = newValue);
+                    debugPrint(
+                      '[NotificationsSettingsPage] Day index $i set to $newValue',
+                    );
                     _scheduleSave();
                   },
           ),
@@ -161,4 +262,3 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     return '$hh:$mm';
   }
 }
-
